@@ -823,7 +823,7 @@ app.get('*', (req, res) => {
 async function startServer() {
   await loadData();
   app.listen(port, () => {
-    console.log(`WebSync TS server listening at http://localhost:${port}`);
+    console.log(`Project Zeus server listening at http://localhost:${port}`);
   });
 }
 
