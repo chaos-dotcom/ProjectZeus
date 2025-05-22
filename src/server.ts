@@ -460,6 +460,10 @@ app.put('/api/automation-configs/:id', async (req, res) => {
     scanDirectoryPath,
     destinationHostIds,
     destinationBasePath,
+    // Ensure processedLogFile is handled correctly on update
+    processedLogFile: type === 'turbosort' 
+                      ? (automationConfigs[configIndex].processedLogFile || `.projectzeus_processed_${id}.txt`) 
+                      : undefined,
   };
 
   await saveData();
