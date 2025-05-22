@@ -301,6 +301,9 @@
             </form>
         </div>
 
+        <div style="margin-bottom: 15px; text-align: right;">
+            <button id="runAllTasksBtn" class="btn btn-info" style="background-color: #17a2b8; color:white;">Run All Tasks</button>
+        </div>
         <h3>Current Tasks:</h3>
         <div id="tasksList">
             <!-- Tasks will be listed here as items -->
@@ -1085,11 +1088,40 @@
                 taskItem.innerHTML = `
                     <span>${task.name}</span>
                     <div>
+                        <button class="btn btn-sm btn-success run-task-btn" data-id="${task.id}" style="margin-right: 5px;">Run</button>
                         <!-- Edit button will load task into form later -->
                         <button class="btn btn-sm btn-primary edit-task" data-id="${task.id}" style="margin-right: 5px;">Edit</button>
                         <button class="btn btn-sm btn-danger delete-task" data-id="${task.id}">Delete</button>
                     </div>
                 `;
+                
+                taskItem.querySelector('.run-task-btn').addEventListener('click', async () => {
+                    const taskId = task.id;
+                    const runButton = taskItem.querySelector('.run-task-btn');
+                    runButton.textContent = 'Running...';
+                    runButton.disabled = true;
+                    try {
+                        const response = await fetch(`/api/tasks/${taskId}/run`, { method: 'POST' });
+                        const result = await response.json();
+                        let resultMessage = `Task "${task.name}" run attempt.\nServer: ${result.message}\n\nResults per path pair:\n`;
+                        result.results.forEach(r => {
+                            resultMessage += `  Path: ${r.pathPair.source} -> ${r.pathPair.destination}\n`;
+                            resultMessage += `  Success: ${r.success}\n`;
+                            if (r.stdout) resultMessage += `  Output:\n${r.stdout}\n`;
+                            if (r.stderr) resultMessage += `  Errors:\n${r.stderr}\n`;
+                            resultMessage += "\n";
+                        });
+                        alert(resultMessage); // Simple feedback for now
+                        console.log("Run task result:", result);
+                        // TODO: Populate the task's specific log view in the editor
+                    } catch (error) {
+                        console.error(`Error running task ${taskId}:`, error);
+                        alert(`Error running task ${task.name}: ${error.message}`);
+                    } finally {
+                        runButton.textContent = 'Run';
+                        runButton.disabled = false;
+                    }
+                });
                 // Add event listeners for delete/edit here later
                 tasksListElement.appendChild(taskItem);
             });
@@ -1224,6 +1256,30 @@
 
         // Event listeners
         taskForm.addEventListener('submit', handleSaveTask);
+        
+        const runAllTasksBtn = document.getElementById('runAllTasksBtn');
+        if (runAllTasksBtn) {
+            runAllTasksBtn.addEventListener('click', async () => {
+                if (!confirm('Are you sure you want to run ALL tasks?')) return;
+
+                runAllTasksBtn.textContent = 'Running All...';
+                runAllTasksBtn.disabled = true;
+                try {
+                    const response = await fetch('/api/tasks/run-all', { method: 'POST' });
+                    const result = await response.json();
+                    // For simplicity, just alert the main message. Detailed results are in console.
+                    alert(result.message); 
+                    console.log("Run all tasks result:", result);
+                    // Potentially update UI based on individual task successes in result.summary
+                } catch (error) {
+                    console.error('Error running all tasks:', error);
+                    alert(`Error running all tasks: ${error.message}`);
+                } finally {
+                    runAllTasksBtn.textContent = 'Run All Tasks';
+                    runAllTasksBtn.disabled = false;
+                }
+            });
+        }
 
         // Initial load
         document.addEventListener('DOMContentLoaded', () => {

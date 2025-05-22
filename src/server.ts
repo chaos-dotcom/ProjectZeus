@@ -661,6 +661,118 @@ app.post('/api/tasks', async (req, res) => {
   res.status(201).json(newTask);
 });
 
+// --- Rsync Task Execution ---
+interface RsyncExecutionResult {
+  pathPair: PathPair;
+  success: boolean;
+  stdout: string;
+  stderr: string;
+  command: string; // For debugging
+}
+
+async function executeRsyncCommand(task: Task, pathPair: PathPair, hostsList: Host[]): Promise<RsyncExecutionResult> {
+  const sourceHostObj = hostsList.find(h => h.id === task.sourceHost);
+  const destinationHostObj = hostsList.find(h => h.id === task.destinationHost);
+
+  if (!sourceHostObj || !destinationHostObj) {
+    return { pathPair, success: false, stdout: '', stderr: 'Source or destination host not found.', command: '' };
+  }
+
+  const privateKeyPath = path.join(os.homedir(), '.ssh', 'websync_id_rsa');
+  if (!fs.existsSync(privateKeyPath)) {
+    // This key is essential for remote operations.
+    // The ssh-copy-id feature should have created it. If not, remote rsync will fail.
+    console.warn(`SSH private key ${privateKeyPath} not found. Remote rsync operations will likely fail.`);
+    // For localhost-to-localhost, this key isn't strictly needed by rsync itself, but good to be aware.
+  }
+
+  let sourceArg = pathPair.source;
+  if (sourceHostObj.id !== 'localhost') {
+    sourceArg = `${sourceHostObj.user}@${sourceHostObj.hostname}:${pathPair.source}`;
+  }
+
+  let destinationArg = pathPair.destination;
+  if (destinationHostObj.id !== 'localhost') {
+    destinationArg = `${destinationHostObj.user}@${destinationHostObj.hostname}:${pathPair.destination}`;
+  }
+
+  let sshPortForRsync: number | undefined;
+  if (destinationHostObj.id !== 'localhost' && destinationHostObj.port) {
+    sshPortForRsync = destinationHostObj.port;
+  } else if (sourceHostObj.id !== 'localhost' && sourceHostObj.port) {
+    sshPortForRsync = sourceHostObj.port;
+  }
+
+  const rsyncSshCommand = `ssh -i "${privateKeyPath}" ${sshPortForRsync ? `-p ${sshPortForRsync}` : ''} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null`;
+  
+  const flagsString = task.flags.join(' ');
+  // Add -e option only if at least one host is remote
+  const rsyncCommand = (sourceHostObj.id !== 'localhost' || destinationHostObj.id !== 'localhost')
+    ? `rsync ${flagsString} -e "${rsyncSshCommand}" "${sourceArg}" "${destinationArg}"`
+    : `rsync ${flagsString} "${sourceArg}" "${destinationArg}"`;
+
+  console.log(`Executing rsync: ${rsyncCommand}`); // Log the command for debugging
+
+  return new Promise<RsyncExecutionResult>((resolve) => {
+    exec(rsyncCommand, (error, stdout, stderr) => {
+      if (error) {
+        console.error(`Rsync execution error for task ${task.name} (${pathPair.source} -> ${pathPair.destination}): ${stderr || error.message}`);
+        resolve({ pathPair, success: false, stdout, stderr: stderr || error.message, command: rsyncCommand });
+      } else {
+        resolve({ pathPair, success: true, stdout, stderr, command: rsyncCommand });
+      }
+    });
+  });
+}
+
+app.post('/api/tasks/:taskId/run', async (req, res) => {
+  const { taskId } = req.params;
+  const task = tasks.find(t => t.id === taskId);
+
+  if (!task) {
+    return res.status(404).json({ message: 'Task not found.' });
+  }
+
+  const executionResults: RsyncExecutionResult[] = [];
+  for (const pathPair of task.paths) {
+    const result = await executeRsyncCommand(task, pathPair, hosts);
+    executionResults.push(result);
+    // If a path pair fails, we could decide to stop or continue with other pairs.
+    // For now, let's continue and report all results.
+  }
+  
+  // Check if all pathPairs were successful
+  const overallSuccess = executionResults.every(r => r.success);
+  if (overallSuccess) {
+    res.json({ message: `Task "${task.name}" executed.`, results: executionResults });
+  } else {
+    // Send 500 if any part failed, but still send results
+    res.status(500).json({ message: `Task "${task.name}" executed with some errors.`, results: executionResults });
+  }
+});
+
+app.post('/api/tasks/run-all', async (req, res) => {
+  if (tasks.length === 0) {
+    return res.json({ message: 'No tasks to run.' });
+  }
+
+  console.log('Starting to run all tasks...');
+  const allTasksResults = [];
+  for (const task of tasks) {
+    const executionResults = [];
+    for (const pathPair of task.paths) {
+      const result = await executeRsyncCommand(task, pathPair, hosts);
+      executionResults.push(result);
+    }
+    allTasksResults.push({ taskId: task.id, taskName: task.name, results: executionResults });
+  }
+  console.log('Finished running all tasks.');
+  // This response could be very large if there are many tasks/paths or lots of output.
+  // Consider how to handle this for many tasks (e.g., background execution and status polling).
+  res.json({ message: 'All tasks execution attempted.', summary: allTasksResults });
+});
+
+
 // A simple API endpoint example
 app.get('/api/hello', (req, res) => {
   res.json({ message: 'Hello from WebSync TS API!' });
