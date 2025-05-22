@@ -689,13 +689,24 @@ app.post('/api/tasks', async (req, res) => {
     }
   }
 
+  let effectiveFlags = flags || []; // Start with provided flags
+
+  if (automationConfigId) {
+    const linkedAutomationConfig = automationConfigs.find(ac => ac.id === automationConfigId);
+    if (linkedAutomationConfig && linkedAutomationConfig.type === 'turbosort') {
+      if (!effectiveFlags.includes('--itemize-changes')) {
+        effectiveFlags.push('--itemize-changes');
+      }
+    }
+  }
+
   const newTask: Task = {
     id: Date.now().toString(), // Simple ID generation
     name,
     sourceHost,
     destinationHost,
     paths,
-    flags: flags || [],
+    flags: effectiveFlags, // Use the potentially modified flags
     scheduleEnabled: !!scheduleEnabled,
     scheduleDetails: scheduleEnabled ? scheduleDetails : undefined,
     automationConfigId: automationConfigId || undefined,
@@ -756,13 +767,28 @@ app.put('/api/tasks/:taskId', async (req, res) => {
 
   // Preserve automation-related fields if they exist and are not part of the update payload
   const existingTask = tasks[taskIndex];
+  
+  // Start with new flags if provided in the request body, else use existing flags.
+  // Ensure req.body.flags is explicitly checked for undefined to distinguish from an empty array.
+  let updatedFlags = req.body.flags !== undefined ? (req.body.flags || []) : [...existingTask.flags];
+
+  // If the task is linked to a turbosort automation, ensure --itemize-changes is present.
+  if (existingTask.automationConfigId) {
+    const linkedAutomationConfig = automationConfigs.find(ac => ac.id === existingTask.automationConfigId);
+    if (linkedAutomationConfig && linkedAutomationConfig.type === 'turbosort') {
+      if (!updatedFlags.includes('--itemize-changes')) {
+        updatedFlags.push('--itemize-changes');
+      }
+    }
+  }
+
   tasks[taskIndex] = {
     ...existingTask, // Keeps original ID, automationConfigId, triggerFilePath
     name,
     sourceHost,
     destinationHost,
     paths,
-    flags: flags || [],
+    flags: updatedFlags, // Use the processed flags
     scheduleEnabled: !!scheduleEnabled,
     scheduleDetails: scheduleEnabled ? scheduleDetails : undefined,
   };
