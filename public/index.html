@@ -181,12 +181,21 @@
                     </select>
                 </div>
                 <div class="form-group">
-                    <label for="automationConfigHostSelect">Host:</label>
-                    <select id="automationConfigHostSelect" style="flex-grow:1; margin-right:10px;"></select>
+                    <label for="automationConfigScanHostSelect">Scan Host:</label>
+                    <select id="automationConfigScanHostSelect" style="flex-grow:1; margin-right:10px;"></select>
                 </div>
                 <div class="form-group">
-                    <label for="automationConfigPathInput">Directory Path:</label>
-                    <input type="text" id="automationConfigPathInput" placeholder="/path/to/scan/recursively" required style="flex-grow:2;">
+                    <label for="automationConfigScanPathInput">Scan Directory Path:</label>
+                    <input type="text" id="automationConfigScanPathInput" placeholder="/path/to/scan/recursively" required style="flex-grow:2;">
+                </div>
+                <div class="form-group">
+                    <label for="automationConfigDestHostsSelect">Destination Hosts:</label>
+                    <select id="automationConfigDestHostsSelect" multiple style="flex-grow:2; min-height: 60px;"></select>
+                    <small style="margin-left:10px; flex-basis: 200px;">(Hold Ctrl/Cmd to select multiple)</small>
+                </div>
+                <div class="form-group">
+                    <label for="automationConfigDestBasePathInput">Destination Base Path:</label>
+                    <input type="text" id="automationConfigDestBasePathInput" placeholder="/path/on/destination/hosts" required style="flex-grow:2;">
                 </div>
                 <div style="text-align: right;">
                     <button type="submit" class="btn btn-primary">Save Configuration</button>
@@ -324,8 +333,10 @@
         const addAutomationConfigForm = document.getElementById('addAutomationConfigForm');
         const automationConfigNameInput = document.getElementById('automationConfigNameInput');
         const automationConfigTypeSelect = document.getElementById('automationConfigTypeSelect');
-        const automationConfigHostSelect = document.getElementById('automationConfigHostSelect');
-        const automationConfigPathInput = document.getElementById('automationConfigPathInput');
+        const automationConfigScanHostSelect = document.getElementById('automationConfigScanHostSelect');
+        const automationConfigScanPathInput = document.getElementById('automationConfigScanPathInput');
+        const automationConfigDestHostsSelect = document.getElementById('automationConfigDestHostsSelect');
+        const automationConfigDestBasePathInput = document.getElementById('automationConfigDestBasePathInput');
         const automationConfigsListElement = document.getElementById('automationConfigsList');
         const automationScanResultsDisplay = document.getElementById('automationScanResultsDisplay');
 
@@ -597,7 +608,9 @@
 
             sourceHostSelect.innerHTML = '';
             destinationHostSelect.innerHTML = '';
-            automationConfigHostSelect.innerHTML = ''; // For the new automation config form
+            automationConfigScanHostSelect.innerHTML = ''; 
+            automationConfigDestHostsSelect.innerHTML = '';
+
 
             hosts.forEach(host => {
                 const option = document.createElement('option');
@@ -605,12 +618,17 @@
                 option.textContent = host.alias;
                 sourceHostSelect.appendChild(option.cloneNode(true));
                 destinationHostSelect.appendChild(option.cloneNode(true));
-                automationConfigHostSelect.appendChild(option.cloneNode(true));
+                automationConfigScanHostSelect.appendChild(option.cloneNode(true));
+                // For destination hosts, only add non-localhost entries, or as per requirements
+                // if (host.id !== 'localhost') { 
+                automationConfigDestHostsSelect.appendChild(option.cloneNode(true));
+                // }
             });
             // Try to reselect previous values if they still exist
             sourceHostSelect.value = hosts.find(h => h.id === currentSourceVal) ? currentSourceVal : (hosts.length > 0 ? hosts[0].id : '');
             destinationHostSelect.value = hosts.find(h => h.id === currentDestVal) ? currentDestVal : (hosts.length > 0 ? hosts[0].id : '');
-            automationConfigHostSelect.value = hosts.length > 0 ? hosts[0].id : '';
+            automationConfigScanHostSelect.value = hosts.length > 0 ? hosts[0].id : '';
+            // For multi-select, no single value is pre-selected unless logic is added
         }
 
         // --- Automation Tab Functionality ---
@@ -634,8 +652,13 @@
                 return;
             }
             configs.forEach(config => {
-                const host = currentHosts.find(h => h.id === config.hostId);
-                const hostAlias = host ? host.alias : 'Unknown Host';
+                const scanHost = currentHosts.find(h => h.id === config.scanHostId);
+                const scanHostAlias = scanHost ? scanHost.alias : 'Unknown Scan Host';
+                const destinationHostAliases = config.destinationHostIds.map(id => {
+                    const destHost = currentHosts.find(h => h.id === id);
+                    return destHost ? destHost.alias : 'Unknown Dest Host';
+                }).join(', ');
+
 
                 const itemDiv = document.createElement('div');
                 itemDiv.className = 'automation-config-item';
@@ -643,11 +666,13 @@
                     <div class="details">
                         <strong>${config.name}</strong>
                         <p>Type: ${config.type === 'livework' ? '.livework files' : '.turbosort files'}</p>
-                        <p>Host: ${hostAlias}</p>
-                        <p>Path: ${config.directoryPath}</p>
+                        <p>Scan Host: ${scanHostAlias}</p>
+                        <p>Scan Path: ${config.scanDirectoryPath}</p>
+                        <p>Destination Hosts: ${destinationHostAliases}</p>
+                        <p>Destination Base Path: ${config.destinationBasePath}</p>
                     </div>
                     <div class="actions">
-                        <button class="btn btn-success scan-now-btn" data-config-id="${config.id}">Scan Now</button>
+                        <button class="btn btn-success scan-now-btn" data-config-id="${config.id}">Scan for Files</button>
                         <button class="btn btn-danger delete-config-btn" data-config-id="${config.id}">Delete</button>
                     </div>
                 `;
@@ -672,49 +697,61 @@
             });
         }
         
-        async function executeAutomationScan(config) {
+        async function executeAutomationScan(config) { // config is an AutomationConfig object
             const scanButton = document.querySelector(`.scan-now-btn[data-config-id="${config.id}"]`);
             if(scanButton) {
                 scanButton.textContent = 'Scanning...';
                 scanButton.disabled = true;
             }
-            automationScanResultsDisplay.innerHTML = `<p>Scanning "${config.name}" on ${currentHosts.find(h=>h.id === config.hostId)?.alias || 'host'} at ${config.directoryPath} for .${config.type} files...</p>`;
+            const scanHostAlias = currentHosts.find(h=>h.id === config.scanHostId)?.alias || 'host';
+            automationScanResultsDisplay.innerHTML = `<p>Scanning "${config.name}" on ${scanHostAlias} at ${config.scanDirectoryPath} for .${config.type} files...</p>`;
 
             try {
-                const response = await fetch(`/api/hosts/${config.hostId}/scan-directory`, {
+                // Step 1: Scan for trigger files
+                const scanResponse = await fetch(`/api/hosts/${config.scanHostId}/scan-directory`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ directoryPath: config.directoryPath })
+                    body: JSON.stringify({ directoryPath: config.scanDirectoryPath })
                 });
 
-                if (!response.ok) {
+                if (!scanResponse.ok) {
                     let errorMessage = `Scan failed. HTTP status: ${response.status}`;
                      try { const errorData = await response.json(); errorMessage = errorData.message || JSON.stringify(errorData); } catch (e) { const errorText = await response.text(); errorMessage = errorText || errorMessage; }
                     throw new Error(errorMessage);
                 }
 
-                let foundFiles = await response.json();
-                foundFiles = foundFiles.filter(file => file.endsWith(`.${config.type}`)); // Filter based on config type
+                let allFoundFiles = await scanResponse.json();
+                // Filter for the specific type of trigger file for this automation config
+                const triggerFiles = allFoundFiles.filter(file => file.endsWith(`.${config.type}`));
 
-                if (foundFiles.length === 0) {
-                    automationScanResultsDisplay.innerHTML = `<p>No .${config.type} files found for configuration "${config.name}".</p>`;
+                if (triggerFiles.length === 0) {
+                    automationScanResultsDisplay.innerHTML = `<p>No .${config.type} trigger files found for configuration "${config.name}".</p>`;
                 } else {
+                    automationScanResultsDisplay.innerHTML = `<strong>Found trigger files for "${config.name}":</strong>`;
                     const ul = document.createElement('ul');
-                    ul.innerHTML = `<strong>Found for "${config.name}":</strong>`;
-                    foundFiles.forEach(file => {
+                    triggerFiles.forEach(triggerFile => {
                         const li = document.createElement('li');
-                        li.textContent = file;
+                        li.textContent = triggerFile;
                         ul.appendChild(li);
+                        // TODO: Implement actual job creation here
+                        // For each triggerFile, determine its parent directory (project folder)
+                        // For each destinationHostId in config.destinationHostIds:
+                        //   Create an rsync task:
+                        //   Source: config.scanHostId, parentDirOf(triggerFile)
+                        //   Destination: destinationHostId, config.destinationBasePath + baseNameOf(parentDirOf(triggerFile))
+                        //   Flags: from a template or default
+                        //   Name: e.g., "Auto: " + config.name + " - " + baseNameOf(parentDirOf(triggerFile)) + " to " + destHostAlias
+                        //   (Consider "one and done" logic here or later)
                     });
-                    automationScanResultsDisplay.innerHTML = '';
                     automationScanResultsDisplay.appendChild(ul);
+                    automationScanResultsDisplay.innerHTML += "<p style='color:blue;'>Automatic job creation based on these files is the next step.</p>";
                 }
             } catch (error) {
                 console.error('Error executing automation scan:', error);
                 automationScanResultsDisplay.innerHTML = `<p style="color:red;">Error scanning for "${config.name}": ${error.message}</p>`;
             } finally {
                  if(scanButton) {
-                    scanButton.textContent = 'Scan Now';
+                    scanButton.textContent = 'Scan for Files';
                     scanButton.disabled = false;
                 }
             }
@@ -722,15 +759,24 @@
 
         addAutomationConfigForm.addEventListener('submit', async (event) => {
             event.preventDefault();
+            const selectedDestinationHostIds = Array.from(automationConfigDestHostsSelect.selectedOptions).map(option => option.value);
+
+            if (selectedDestinationHostIds.length === 0) {
+                alert('Please select at least one destination host.');
+                return;
+            }
+
             const newConfigData = {
                 name: automationConfigNameInput.value.trim(),
                 type: automationConfigTypeSelect.value,
-                hostId: automationConfigHostSelect.value,
-                directoryPath: automationConfigPathInput.value.trim()
+                scanHostId: automationConfigScanHostSelect.value,
+                scanDirectoryPath: automationConfigScanPathInput.value.trim(),
+                destinationHostIds: selectedDestinationHostIds,
+                destinationBasePath: automationConfigDestBasePathInput.value.trim()
             };
 
-            if (!newConfigData.name || !newConfigData.hostId || !newConfigData.directoryPath) {
-                alert('Name, Host, and Directory Path are required for an automation configuration.');
+            if (!newConfigData.name || !newConfigData.scanHostId || !newConfigData.scanDirectoryPath || !newConfigData.destinationBasePath) {
+                alert('Name, Scan Host, Scan Directory Path, and Destination Base Path are required.');
                 return;
             }
 
@@ -745,7 +791,9 @@
                     throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
                 }
                 addAutomationConfigForm.reset(); // Clear the form
-                automationConfigHostSelect.value = currentHosts.length > 0 ? currentHosts[0].id : ''; // Reset dropdown
+                automationConfigScanHostSelect.value = currentHosts.length > 0 ? currentHosts[0].id : ''; // Reset dropdown
+                // Clear multi-select for destination hosts
+                Array.from(automationConfigDestHostsSelect.options).forEach(option => option.selected = false);
                 fetchAndRenderAutomationConfigs(); // Refresh the list
             } catch (error) {
                 console.error('Error saving automation config:', error);

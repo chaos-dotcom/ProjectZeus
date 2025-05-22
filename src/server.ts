@@ -37,11 +37,13 @@ let tasks: Task[] = []; // Will be populated by loadData
 interface AutomationConfig {
   id: string;
   name: string;
-  type: 'livework' | 'turbosort';
-  hostId: string;
-  directoryPath: string;
-  // lastScanned?: string; // Optional: for future use
-  // templateTaskId?: string; // Optional: for job creation from template
+  type: 'livework' | 'turbosort'; // The type of file that triggers this automation
+  scanHostId: string;             // The host where scanning for trigger files occurs
+  scanDirectoryPath: string;      // The base directory on scanHostId to scan recursively
+  destinationHostIds: string[];   // Array of host IDs to copy the project folder to
+  destinationBasePath: string;    // Base path on each destination host
+  // templateTaskId?: string; // For future use: ID of a Task to use as a template
+  // lastProcessedFiles?: { [filePath: string]: string }; // For "one and done": filePath -> timestamp/status
 }
 
 let automationConfigs: AutomationConfig[] = []; // Will be populated by loadData
@@ -277,24 +279,41 @@ app.get('/api/automation-configs', (req, res) => {
 });
 
 app.post('/api/automation-configs', async (req, res) => {
-  const { name, type, hostId, directoryPath } = req.body;
+  const { 
+    name, 
+    type, 
+    scanHostId, 
+    scanDirectoryPath, 
+    destinationHostIds, 
+    destinationBasePath 
+  } = req.body;
 
-  if (!name || !type || !hostId || !directoryPath) {
-    return res.status(400).json({ message: 'Name, type, hostId, and directoryPath are required.' });
+  if (!name || !type || !scanHostId || !scanDirectoryPath || !destinationHostIds || !destinationBasePath) {
+    return res.status(400).json({ message: 'Name, type, scanHostId, scanDirectoryPath, destinationHostIds, and destinationBasePath are required.' });
   }
   if (type !== 'livework' && type !== 'turbosort') {
     return res.status(400).json({ message: 'Invalid type. Must be "livework" or "turbosort".' });
   }
-  if (!hosts.find(h => h.id === hostId)) {
-    return res.status(400).json({ message: 'HostId does not refer to a valid host.' });
+  if (!hosts.find(h => h.id === scanHostId)) {
+    return res.status(400).json({ message: 'scanHostId does not refer to a valid host.' });
+  }
+  if (!Array.isArray(destinationHostIds) || destinationHostIds.length === 0) {
+    return res.status(400).json({ message: 'destinationHostIds must be a non-empty array.'});
+  }
+  for (const destHostId of destinationHostIds) {
+    if (!hosts.find(h => h.id === destHostId)) {
+      return res.status(400).json({ message: `Invalid hostId "${destHostId}" in destinationHostIds.` });
+    }
   }
 
   const newConfig: AutomationConfig = {
     id: Date.now().toString(),
     name,
     type,
-    hostId,
-    directoryPath,
+    scanHostId,
+    scanDirectoryPath,
+    destinationHostIds,
+    destinationBasePath,
   };
   automationConfigs.push(newConfig);
   await saveData();
