@@ -960,7 +960,16 @@
                                 sourcePath: rsyncSourcePath, // Use the path with a trailing slash
                                 destinationHostId: destHostId,
                                 destinationPath: finalDestinationPath,
-                                flags: config.type === 'livework' ? ['-a', '-v', '--delete', '-u'] : ['-a', '-v', '--delete'], // Add -u for livework
+                                flags: (() => {
+                                    let baseFlags = config.type === 'livework' ? ['-a', '-v', '--delete', '-u'] : ['-a', '-v', '--delete'];
+                                    if (config.type === 'turbosort' && config.processedLogFile && config.scanDirectoryPath) {
+                                        // Construct the exclude file path as the backend would for display purposes.
+                                        // This assumes Unix-like paths.
+                                        const excludeFilePath = `${config.scanDirectoryPath}/${config.processedLogFile}`.replace(/\/\//g, '/');
+                                        baseFlags.push(`--exclude-from='${excludeFilePath}'`);
+                                    }
+                                    return baseFlags;
+                                })(),
                                 automationConfigId: config.id, // Link to the automation config
                                 triggerFilePath: triggerFile,    // Link to the specific trigger file
                                 // scheduleEnabled: false, // Typically run once
