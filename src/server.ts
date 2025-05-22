@@ -837,9 +837,6 @@ async function executeRsyncCommand(task: Task, pathPair: PathPair, hostsList: Ho
       // Extract project name from the source path
       const projectName = path.basename(pathPair.source.endsWith('/') ? pathPair.source.slice(0, -1) : pathPair.source);
       
-      // Create a project-specific exclude file name that will be stored inside the project folder
-      const projectSpecificExcludeFile = `${automationConfig.processedLogFile}_${projectName}.txt`;
-      
       // Place the exclude file inside the project folder itself
       let excludeFilePathOnSource = path.join(pathPair.source, `.${projectName}_processed.txt`);
       
