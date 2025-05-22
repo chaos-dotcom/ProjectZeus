@@ -818,7 +818,6 @@ async function executeRsyncCommand(task: Task, pathPair: PathPair, hostsList: Ho
   const flagsString = task.flags.join(' ');
   let rsyncCommand: string;
   let finalFlags = [...task.flags]; // Start with task's flags
-  const privateKeyPath = path.join(os.homedir(), '.ssh', 'websync_id_rsa'); // Define earlier for use in touch
 
   // Check if this task is from a .turbosort automation and needs an exclude file
   if (task.automationConfigId) {
