@@ -833,11 +833,12 @@ async function executeRsyncCommand(task: Task, pathPair: PathPair, hostsList: Ho
     }
     // --- END SERVER-SIDE DEBUGGING ---
 
-    if (automationConfig && automationConfig.type === 'turbosort' && automationConfig.processedLogFile && automationConfig.scanDirectoryPath) {
+    if (automationConfig && automationConfig.type === 'turbosort') {
       // Extract project name from the source path
       const projectName = path.basename(pathPair.source.endsWith('/') ? pathPair.source.slice(0, -1) : pathPair.source);
       
       // Place the exclude file inside the project folder itself
+      // The path is constructed using sourcePath (pathPair.source) and projectFolderName (projectName)
       let excludeFilePathOnSource = path.join(pathPair.source, `.${projectName}_processed.txt`);
       
       // For debugging
@@ -871,15 +872,18 @@ async function executeRsyncCommand(task: Task, pathPair: PathPair, hostsList: Ho
       }
       // --- End ensure exclude file exists ---
 
-      // Add the exclude-from flag and itemize-changes flag for reliable output parsing
+      // Add the exclude-from flag
       finalFlags.push(`--exclude-from='${excludeFilePathOnSource.replace(/'/g, "'\\''")}'`);
+      
       // Add itemize-changes flag if not already present - this provides structured output of changed files
       if (!finalFlags.includes('--itemize-changes')) {
         finalFlags.push('--itemize-changes');
       }
-      console.log(`[Rsync Exec] ADDED --exclude-from='${excludeFilePathOnSource}' to flags for task ${task.id}`); // DEBUG
+      console.log(`[Rsync Exec] ADDED --exclude-from and --itemize-changes (if needed) for turbosort task ${task.id}`); // DEBUG
     } else {
-      console.log(`[Rsync Exec] DID NOT add --exclude-from for task ${task.id}. Conditions: type=${automationConfig?.type}, processedLogFile=${automationConfig?.processedLogFile}, scanPath=${automationConfig?.scanDirectoryPath}`); // DEBUG
+      // Updated log message to reflect that the main condition for not adding is not being a turbosort task,
+      // or automationConfig not being found.
+      console.log(`[Rsync Exec] DID NOT add --exclude-from for task ${task.id}. Conditions: automationConfig found=${!!automationConfig}, type=${automationConfig?.type}`); // DEBUG
     }
   }
   const effectiveFlagsString = finalFlags.join(' ');
