@@ -106,6 +106,7 @@
             <a href="#" data-tab="dashboard">Dashboard</a>
             <a href="#" data-tab="tasks" class="active-nav-link">Tasks</a>
             <a href="#" data-tab="hosts">Hosts</a>
+            <a href="#" data-tab="scanner">Scanner</a>
             <a href="#" data-tab="logs">Logs</a>
             <a href="#" data-tab="settings">Settings</a>
         </nav>
@@ -142,6 +143,27 @@
         <h3>Current Hosts:</h3>
         <div id="hostsList">
             <!-- Hosts will be listed here -->
+        </div>
+    </div>
+
+    <!-- Scanner Section -->
+    <div class="container tab-content" id="scanner-section">
+        <h2>File Scanner</h2>
+        <div class="host-form-container"> <!-- Reusing some styles -->
+            <h3>Scan Directory on Host</h3>
+            <form id="scanDirectoryForm" class="form-group">
+                <label for="scanHostSelect" style="min-width: auto; margin-right: 5px;">Host:</label>
+                <select id="scanHostSelect" style="flex-grow: 1; margin-right:10px;"></select>
+                
+                <label for="scanDirectoryPathInput" style="min-width: auto; margin-right: 5px;">Path:</label>
+                <input type="text" id="scanDirectoryPathInput" placeholder="/path/to/scan" style="flex-grow: 2; margin-right:10px;" required>
+                
+                <button type="submit" id="executeScanButton" class="btn btn-primary">Scan</button>
+            </form>
+        </div>
+        <h3>Scan Results:</h3>
+        <div id="scanResultsList" style="padding:10px; border:1px solid #eee; min-height: 100px; background: #fdfdfd;">
+            <p>Scan results will appear here.</p>
         </div>
     </div>
 
@@ -257,6 +279,13 @@
         const hostsListElement = document.getElementById('hostsList');
 
         let editingHostId = null; // To store the ID of the host being edited
+
+        // Scanner Elements
+        const scanDirectoryForm = document.getElementById('scanDirectoryForm');
+        const scanHostSelect = document.getElementById('scanHostSelect');
+        const scanDirectoryPathInput = document.getElementById('scanDirectoryPathInput');
+        const executeScanButton = document.getElementById('executeScanButton');
+        const scanResultsList = document.getElementById('scanResultsList');
 
         // Tab Navigation Elements
         const navLinks = document.querySelectorAll('nav a[data-tab]');
@@ -525,18 +554,82 @@
 
             sourceHostSelect.innerHTML = '';
             destinationHostSelect.innerHTML = '';
+            scanHostSelect.innerHTML = ''; // Also populate scanner host select
 
             hosts.forEach(host => {
                 const option = document.createElement('option');
                 option.value = host.id; // Use host ID as value
                 option.textContent = host.alias;
                 sourceHostSelect.appendChild(option.cloneNode(true));
-                destinationHostSelect.appendChild(option);
+                destinationHostSelect.appendChild(option.cloneNode(true));
+                scanHostSelect.appendChild(option); // Add to scanner host select
             });
             // Try to reselect previous values if they still exist
             sourceHostSelect.value = hosts.find(h => h.id === currentSourceVal) ? currentSourceVal : (hosts.length > 0 ? hosts[0].id : '');
             destinationHostSelect.value = hosts.find(h => h.id === currentDestVal) ? currentDestVal : (hosts.length > 0 ? hosts[0].id : '');
+            scanHostSelect.value = hosts.length > 0 ? hosts[0].id : ''; // Default scanner host
         }
+
+        // --- Scanner Tab Functionality ---
+        scanDirectoryForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const hostId = scanHostSelect.value;
+            const directoryPath = scanDirectoryPathInput.value.trim();
+
+            if (!hostId) {
+                alert('Please select a host.');
+                return;
+            }
+            if (!directoryPath) {
+                alert('Please enter a directory path to scan.');
+                return;
+            }
+
+            executeScanButton.textContent = 'Scanning...';
+            executeScanButton.disabled = true;
+            scanResultsList.innerHTML = '<p>Scanning...</p>';
+
+            try {
+                const response = await fetch(`/api/hosts/${hostId}/scan-directory`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ directoryPath })
+                });
+
+                if (!response.ok) {
+                    let errorMessage = `Scan failed. HTTP status: ${response.status}`;
+                    try {
+                        const errorData = await response.json(); // Assuming error response is JSON
+                        errorMessage = errorData.message || JSON.stringify(errorData);
+                    } catch (e) {
+                        const errorText = await response.text();
+                        errorMessage = errorText || errorMessage;
+                    }
+                    throw new Error(errorMessage);
+                }
+
+                const foundFiles = await response.json();
+                if (foundFiles.length === 0) {
+                    scanResultsList.innerHTML = '<p>No .livework or .turbosort files found in the specified directory.</p>';
+                } else {
+                    const ul = document.createElement('ul');
+                    foundFiles.forEach(file => {
+                        const li = document.createElement('li');
+                        li.textContent = file;
+                        ul.appendChild(li);
+                    });
+                    scanResultsList.innerHTML = '';
+                    scanResultsList.appendChild(ul);
+                }
+
+            } catch (error) {
+                console.error('Error scanning directory:', error);
+                scanResultsList.innerHTML = `<p style="color:red;">Error: ${error.message}</p>`;
+            } finally {
+                executeScanButton.textContent = 'Scan';
+                executeScanButton.disabled = false;
+            }
+        });
 
 
         // Function to fetch tasks and render them
