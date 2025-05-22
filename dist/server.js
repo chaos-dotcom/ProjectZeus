@@ -568,19 +568,19 @@ async function executeRsyncCommand(task, pathPair, hostsList) {
     let rsyncCommand;
     if (sourceHostObj.id !== 'localhost' && destinationHostObj.id !== 'localhost') {
         // Remote-to-Remote: SSH into sourceHostObj and execute rsync from there to destinationHostObj
-        // This assumes sourceHostObj can SSH to destinationHostObj using its own keys (e.g., websync_id_rsa if copied there, or agent forwarding)
-        // For simplicity, we'll assume websync_id_rsa is on sourceHostObj and authorized on destinationHostObj.
-        // The 'rsyncSshCommand' here is for the *inner* rsync from RHA to RHB.
-        const innerRsyncSshCommand = `ssh -i "${privateKeyPath}" ${destinationHostObj.port ? `-p ${destinationHostObj.port}` : ''} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes`;
-        const remoteRsyncCommand = `rsync ${flagsString} -e \\"${innerRsyncSshCommand}\\" "${pathPair.source}" "${destinationHostObj.user}@${destinationHostObj.hostname}:${pathPair.destination}"`;
-        // The outer SSH command to connect to sourceHostObj (RHA)
+        const innerSshOptions = `-i "${privateKeyPath}" ${destinationHostObj.port ? `-p ${destinationHostObj.port}` : ''} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes`;
+        // Ensure the -e command is properly quoted for the outer SSH, and then for rsync itself.
+        // Using single quotes around the -e argument for rsync, and escaping single quotes within.
+        const remoteRsyncCommand = `rsync ${flagsString} -e 'ssh ${innerSshOptions.replace(/'/g, "'\\''")}' '${pathPair.source.replace(/'/g, "'\\''")}' '${destinationHostObj.user}@${destinationHostObj.hostname}:${pathPair.destination.replace(/'/g, "'\\''")}'`;
         const outerSshPortOption = sourceHostObj.port ? `-p ${sourceHostObj.port}` : '';
+        // The command to be executed on the source host needs careful quoting.
         rsyncCommand = `ssh -i "${privateKeyPath}" ${outerSshPortOption} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes ${sourceHostObj.user}@${sourceHostObj.hostname} "${remoteRsyncCommand.replace(/"/g, '\\"')}"`;
         console.log(`Executing remote-to-remote rsync (via ${sourceHostObj.alias}): ${rsyncCommand.split(' ')[0]} ... details in task log`);
     }
     else if (sourceHostObj.id !== 'localhost' || destinationHostObj.id !== 'localhost') {
         // Local-to-Remote or Remote-to-Local
-        rsyncCommand = `rsync ${flagsString} -e "${rsyncSshCommand}" "${sourceArg}" "${destinationArg}"`;
+        // Using single quotes for the -e option for rsync
+        rsyncCommand = `rsync ${flagsString} -e 'ssh ${rsyncSshCommand.substring(4)}' "${sourceArg}" "${destinationArg}"`; // substring(4) to remove 'ssh ' from rsyncSshCommand as -e 'ssh ...'
         console.log(`Executing rsync: ${rsyncCommand}`);
     }
     else {
