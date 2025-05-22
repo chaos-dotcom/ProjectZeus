@@ -729,12 +729,16 @@ async function executeRsyncCommand(task: Task, pathPair: PathPair, hostsList: Ho
       rsyncCommand = `ssh -i "${privateKeyPath}" ${sshPortOption} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes ${sourceHostObj.user}@${sourceHostObj.hostname} "${remoteLocalRsyncCommand.replace(/"/g, '\\"')}"`;
       console.log(`Executing remote-to-same-remote rsync (on ${sourceHostObj.alias}): ${rsyncCommand.split(' ')[0]} ... details in task log`);
     } else {
-      // Remote-to-DIFFERENT-Remote: SSH into sourceHostObj and execute rsync from there to destinationHostObj
-      const innerSshOptions = `-i "${privateKeyPath}" ${destinationHostObj.port ? `-p ${destinationHostObj.port}` : ''} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes`;
-      const remoteRsyncCommand = `rsync ${flagsString} -e 'ssh ${innerSshOptions.replace(/'/g, "'\\''")}' '${pathPair.source.replace(/'/g, "'\\''")}' '${destinationHostObj.user}@${destinationHostObj.hostname}:${pathPair.destination.replace(/'/g, "'\\''")}'`;
+      // Remote-to-DIFFERENT-Remote: SSH into sourceHostObj (RHA) and execute rsync from there to destinationHostObj (RHB).
+      // RHA uses its own default SSH configuration to connect to RHB.
+      // WSS only provides the port for RHB if it's non-standard and specified in RHB's host config.
+      const rhaToRhbSshCommandForRsync = `ssh${destinationHostObj.port ? ` -p ${destinationHostObj.port}` : ''}`;
+      const remoteRsyncCommand = `rsync ${flagsString} -e '${rhaToRhbSshCommandForRsync.replace(/'/g, "'\\''")}' '${pathPair.source.replace(/'/g, "'\\''")}' '${destinationHostObj.user}@${destinationHostObj.hostname}:${pathPair.destination.replace(/'/g, "'\\''")}'`;
+      
+      // WSS connects to RHA using websync_id_rsa and specific SSH options.
       const outerSshPortOption = sourceHostObj.port ? `-p ${sourceHostObj.port}` : '';
       rsyncCommand = `ssh -i "${privateKeyPath}" ${outerSshPortOption} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes ${sourceHostObj.user}@${sourceHostObj.hostname} "${remoteRsyncCommand.replace(/"/g, '\\"')}"`;
-      console.log(`Executing remote-to-different-remote rsync (via ${sourceHostObj.alias}): ${rsyncCommand.split(' ')[0]} ... details in task log`);
+      console.log(`Executing remote-to-different-remote rsync (WSS -> ${sourceHostObj.alias} -> ${destinationHostObj.alias}): ${rsyncCommand.split(' ')[0]} ... details in task log`);
     }
   } else if (sourceHostObj.id !== 'localhost' || destinationHostObj.id !== 'localhost') {
     // Local-to-Remote or Remote-to-Local
