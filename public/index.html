@@ -914,6 +914,8 @@
 
                     // --- Propose New Jobs ---
                     let newJobsToProposeDetails = [];
+                    let skippedJobMessages = []; // To store messages for skipped jobs
+
                     if (jobCreationDetails.length > 0) {
                         jobCreationDetails.forEach(jobDetail => {
                             const existingTask = tasksForThisAutomation.find(t => 
@@ -922,12 +924,17 @@
                                 t.paths[0]?.source === jobDetail.sourcePath && 
                                 t.paths[0]?.destination === jobDetail.destinationPath
                             );
-                            // Only propose if it doesn't exist OR if its trigger file was just re-found (meaning it might have been deleted and should be re-added)
-                            // A simpler logic for now: only propose if no exact match is found.
                             if (!existingTask) {
                                 newJobsToProposeDetails.push(jobDetail);
+                            } else {
+                                const destHostAlias = currentHosts.find(h=>h.id === jobDetail.destinationHostId)?.alias || jobDetail.destinationHostId;
+                                skippedJobMessages.push(`Skipped: Task for trigger "${jobDetail.triggerFilePath}" to "${destHostAlias}" (Source: ${jobDetail.sourcePath}) already exists.`);
                             }
                         });
+                    }
+
+                    if (skippedJobMessages.length > 0) {
+                        automationScanResultsDisplay.innerHTML += "<h4>Existing/Skipped Tasks:</h4><ul>" + skippedJobMessages.map(msg => `<li>${msg}</li>`).join('') + "</ul>";
                     }
                     
                     if (newJobsToProposeDetails.length > 0) {
@@ -946,12 +953,18 @@
                         createTasksButton.addEventListener('click', handleCreateProposedTasks);
                         automationScanResultsDisplay.appendChild(createTasksButton);
 
-                    } else if (triggerFiles.length > 0 && deletedTasksInfo.length === 0) {
-                         automationScanResultsDisplay.innerHTML += "<p>All found trigger files appear to have corresponding tasks already. No new jobs to propose.</p>";
-                         currentProposedJobs = []; // Clear any previous proposals
-                    } else if (triggerFiles.length === 0 && deletedTasksInfo.length === 0) {
-                         currentProposedJobs = []; // Clear any previous proposals
-                         // This case is already handled by "No .${config.type} trigger files found..."
+                    } else if (triggerFiles.length > 0 && deletedTasksInfo.length === 0 && skippedJobMessages.length > 0) {
+                         // This condition means trigger files were found, no tasks were deleted, but all potential jobs already existed.
+                         automationScanResultsDisplay.innerHTML += "<p>All found trigger files correspond to tasks that already exist. No new jobs to propose.</p>";
+                         currentProposedJobs = []; 
+                    } else if (triggerFiles.length > 0 && deletedTasksInfo.length === 0 && skippedJobMessages.length === 0 && newJobsToProposeDetails.length === 0) {
+                        // This means trigger files were found, but they didn't result in any existing or new jobs (should be rare if logic is correct)
+                        automationScanResultsDisplay.innerHTML += "<p>Scan complete. No new jobs to propose and no existing tasks matched the found trigger files under this configuration.</p>";
+                        currentProposedJobs = [];
+                    } else if (triggerFiles.length === 0 && deletedTasksInfo.length === 0 && skippedJobMessages.length === 0) {
+                         // This case is for when no trigger files are found at all.
+                         currentProposedJobs = []; 
+                         // The message "No .${config.type} trigger files found..." is already displayed earlier.
                     }
                 }
             } catch (error) {
