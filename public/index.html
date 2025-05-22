@@ -113,10 +113,35 @@
         .automation-config-item .details strong { font-size: 1em; }
         .automation-config-item .actions button { margin-left: 5px; }
 
+        /* Message Banner Styles */
+        .message-banner {
+            padding: 10px 15px;
+            margin-bottom: 15px;
+            border: 1px solid transparent;
+            border-radius: 4px;
+            text-align: center;
+            font-weight: bold;
+        }
+        .message-banner.success {
+            color: #155724;
+            background-color: #d4edda;
+            border-color: #c3e6cb;
+        }
+        .message-banner.error {
+            color: #721c24;
+            background-color: #f8d7da;
+            border-color: #f5c6cb;
+        }
+        .message-banner.info {
+            color: #0c5460;
+            background-color: #d1ecf1;
+            border-color: #bee5eb;
+        }
     </style>
 </head>
 <body>
     <header>
+        <div id="messageBanner" class="message-banner" style="display:none;"></div>
         <h1>WebSync TS</h1>
         <nav>
             <a href="#" data-tab="dashboard">Dashboard</a>
@@ -370,6 +395,22 @@
         let scheduleEnabled = false;
         let currentHosts = []; // To store fetched hosts for populating dropdowns
         
+        const messageBanner = document.getElementById('messageBanner');
+        let messageTimeout;
+
+        function showMessage(message, type = 'info', duration = 5000) {
+            if (messageTimeout) clearTimeout(messageTimeout);
+            messageBanner.textContent = message;
+            messageBanner.className = `message-banner ${type}`; // type can be 'success', 'error', 'info'
+            messageBanner.style.display = 'block';
+
+            if (duration > 0) {
+                messageTimeout = setTimeout(() => {
+                    messageBanner.style.display = 'none';
+                }, duration);
+            }
+        }
+        
         const rsyncFlags = [
             { label: 'verbose', value: '-v' }, { label: 'quiet', value: '-q' }, { label: 'checksum', value: '-c' }, 
             { label: 'archive', value: '-a' }, { label: 'recursive', value: '-r' }, { label: 'relative', value: '-R' },
@@ -509,10 +550,10 @@
                                 if (!response.ok) {
                                     throw new Error(result.message || `HTTP error! status: ${response.status}`);
                                 }
-                                alert(result.message);
+                                showMessage(result.message, 'success');
                             } catch (err) {
                                 console.error('SSH Setup Error:', err);
-                                alert(`Error during SSH setup: ${err.message}`);
+                                showMessage(`Error during SSH setup: ${err.message}`, 'error');
                             } finally {
                                 sshButton.textContent = 'SSH Setup';
                                 sshButton.disabled = false;
@@ -569,17 +610,17 @@
             };
 
             if (!hostData.alias) { // Alias is always required
-                alert('Alias is required.');
+                showMessage('Alias is required.', 'error');
                 return;
             }
             // User and Hostname are required unless it's localhost (where they are disabled)
             if (editingHostId !== 'localhost' && (hostData.user === '' || hostData.hostname === '')) {
-                 alert('User and Hostname are required for non-localhost entries.');
+                 showMessage('User and Hostname are required for non-localhost entries.', 'error');
                  return;
             }
 
             if (hostData.port && (isNaN(hostData.port) || hostData.port <= 0 || hostData.port > 65535)) {
-                 alert('Port must be a valid number between 1 and 65535.');
+                 showMessage('Port must be a valid number between 1 and 65535.', 'error');
                  return;
             }
             
@@ -618,9 +659,10 @@
                 }
                 resetHostForm(); // Resets form and editingHostId
                 fetchAndRenderHosts(); // Refresh list and dropdowns
+                showMessage(`Host ${editingHostId ? 'updated' : 'added'} successfully.`, 'success');
             } catch (error) {
                 console.error(`Error ${editingHostId ? 'updating' : 'adding'} host:`, error);
-                alert(`Error ${editingHostId ? 'updating' : 'adding'} host: ${error.message}`);
+                showMessage(`Error ${editingHostId ? 'updating' : 'adding'} host: ${error.message}`, 'error');
             }
         });
 
@@ -714,9 +756,10 @@
                             const res = await fetch(`/api/automation-configs/${config.id}`, { method: 'DELETE' });
                             if (!res.ok) throw new Error(`Failed to delete config. Status: ${res.status}`);
                             fetchAndRenderAutomationConfigs(); // Refresh the list
+                            showMessage(`Automation configuration "${config.name}" deleted.`, 'success');
                         } catch (err) {
                             console.error('Error deleting automation config:', err);
-                            alert(`Error deleting config: ${err.message}`);
+                            showMessage(`Error deleting config: ${err.message}`, 'error');
                         }
                     }
                 });
@@ -1020,7 +1063,7 @@
             const selectedDestinationHostIds = Array.from(automationConfigDestHostsSelect.selectedOptions).map(option => option.value);
 
             if (selectedDestinationHostIds.length === 0) {
-                alert('Please select at least one destination host.');
+                showMessage('Please select at least one destination host.', 'error');
                 return;
             }
 
@@ -1034,7 +1077,7 @@
             };
 
             if (!newConfigData.name || !newConfigData.scanHostId || !newConfigData.scanDirectoryPath || !newConfigData.destinationBasePath) {
-                alert('Name, Scan Host, Scan Directory Path, and Destination Base Path are required.');
+                showMessage('Name, Scan Host, Scan Directory Path, and Destination Base Path are required.', 'error');
                 return;
             }
 
@@ -1053,9 +1096,10 @@
                 }
                 resetAutomationConfigForm();
                 fetchAndRenderAutomationConfigs(); // Refresh the list
+                showMessage(`Automation configuration ${editingAutomationConfigId ? 'updated' : 'saved'} successfully.`, 'success');
             } catch (error) {
                 console.error(`Error ${editingAutomationConfigId ? 'updating' : 'saving'} automation config:`, error);
-                alert(`Error ${editingAutomationConfigId ? 'updating' : 'saving'} automation configuration: ${error.message}`);
+                showMessage(`Error ${editingAutomationConfigId ? 'updating' : 'saving'} automation configuration: ${error.message}`, 'error');
             }
         });
 
@@ -1108,10 +1152,11 @@
                                 } catch (e) { /* Ignore if response is not JSON */ }
                                 throw new Error(errorMsg);
                             }
+                            showMessage(`Task "${task.name}" deleted successfully.`, 'success');
                             fetchAndRenderTasks(); // Refresh the tasks list
                         } catch (error) {
                             console.error(`Error deleting task ${taskId}:`, error);
-                            alert(`Error deleting task: ${error.message}`);
+                            showMessage(`Error deleting task: ${error.message}`, 'error');
                         }
                     }
                 });
@@ -1132,12 +1177,18 @@
                             if (r.stderr) resultMessage += `  Errors:\n${r.stderr}\n`;
                             resultMessage += "\n";
                         });
-                        alert(resultMessage); // Simple feedback for now
-                        console.log("Run task result:", result);
+                        // For long messages, console might be better than showMessage, or a dedicated modal.
+                        // For now, let's use showMessage but it might be too much.
+                        console.log("Run task result:", result); 
+                        if (result.results.some(r => !r.success)) {
+                            showMessage(`Task "${task.name}" run with errors. Check console for details.`, 'error', 0); // 0 duration = sticky
+                        } else {
+                            showMessage(`Task "${task.name}" run successfully. Check console for details.`, 'success');
+                        }
                         // TODO: Populate the task's specific log view in the editor
                     } catch (error) {
                         console.error(`Error running task ${taskId}:`, error);
-                        alert(`Error running task ${task.name}: ${error.message}`);
+                        showMessage(`Error running task ${task.name}: ${error.message}`, 'error');
                     } finally {
                         runButton.textContent = 'Run';
                         runButton.disabled = false;
@@ -1162,7 +1213,7 @@
                 if (pathPairsContainer.querySelectorAll('.path-pair').length > 1) {
                     div.remove();
                 } else {
-                    alert("At least one path pair is required.");
+                    showMessage("At least one path pair is required.", 'error');
                 }
             });
             return div;
@@ -1206,7 +1257,7 @@
             event.preventDefault();
             const taskName = taskNameInput.value.trim();
             if (!taskName) {
-                alert('Task name cannot be empty.');
+                showMessage('Task name cannot be empty.', 'error');
                 return;
             }
 
@@ -1220,7 +1271,7 @@
             });
 
             if (paths.length === 0) {
-                alert('At least one valid source/destination path pair is required.');
+                showMessage('At least one valid source/destination path pair is required.', 'error');
                 return;
             }
 
@@ -1269,9 +1320,10 @@
                 // Reset schedule
                 scheduleOffBtn.click(); 
                 fetchAndRenderTasks(); // Refresh the tasks list
+                showMessage('Task saved successfully.', 'success');
             } catch (error) {
                 console.error('Error saving task:', error);
-                alert(`Error saving task: ${error.message}`);
+                showMessage(`Error saving task: ${error.message}`, 'error');
             }
         }
 
@@ -1288,13 +1340,18 @@
                 try {
                     const response = await fetch('/api/tasks/run-all', { method: 'POST' });
                     const result = await response.json();
-                    // For simplicity, just alert the main message. Detailed results are in console.
-                    alert(result.message); 
                     console.log("Run all tasks result:", result);
+                    // Check summary for errors
+                    const anyFailed = result.summary && result.summary.some(taskResult => taskResult.results.some(r => !r.success));
+                    if (anyFailed) {
+                        showMessage(result.message + " Some tasks had errors. Check console for details.", 'error', 0); // Sticky
+                    } else {
+                        showMessage(result.message, 'success');
+                    }
                     // Potentially update UI based on individual task successes in result.summary
                 } catch (error) {
                     console.error('Error running all tasks:', error);
-                    alert(`Error running all tasks: ${error.message}`);
+                    showMessage(`Error running all tasks: ${error.message}`, 'error');
                 } finally {
                     runAllTasksBtn.textContent = 'Run All Tasks';
                     runAllTasksBtn.disabled = false;
