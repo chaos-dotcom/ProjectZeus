@@ -943,8 +943,10 @@
                             
                             let finalDestinationPath = config.destinationBasePath;
                             if (config.type === 'turbosort' && specificDestSubDir) {
-                                finalDestinationPath = `${config.destinationBasePath}/${specificDestSubDir}/${projectFolderName}`;
-                            } else { // For .livework or .turbosort without specific subdir (e.g. empty file)
+                                // For .turbosort, the final part of the path is "ONE_DRIVE"
+                                finalDestinationPath = `${config.destinationBasePath}/${specificDestSubDir}/ONE_DRIVE`;
+                            } else { 
+                                // For .livework or .turbosort without specific subdir (e.g. empty .turbosort file)
                                 finalDestinationPath = `${config.destinationBasePath}/${projectFolderName}`;
                             }
                             // Normalize path (remove double slashes if any)
