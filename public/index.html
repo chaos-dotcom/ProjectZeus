@@ -325,7 +325,7 @@
 
         <!-- This will be the main task editor/creator form -->
         <div class="task-editor" id="taskEditorFormContainer">
-            <h3>Add New Task / Edit Task</h3>
+            <h3 id="taskFormTitle">Add New Task</h3>
             <form id="taskForm">
                 <div class="form-group">
                     <label for="taskNameInput">Task Name:</label>
@@ -384,9 +384,10 @@
                 </div>
 
                 <div class="task-actions">
-                    <button type="submit" class="btn btn-primary">Save Task</button>
-                    <button type="button" id="runTaskBtn" class="btn btn-success">Run</button>
-                    <button type="button" id="testTaskBtn" class="btn">Test</button>
+                    <button type="submit" id="saveTaskButton" class="btn btn-primary">Save Task</button>
+                    <button type="button" id="cancelEditTaskButton" class="btn" style="display:none; background-color: #6c757d; color:white;">Cancel Edit</button>
+                    <button type="button" id="runTaskBtn" class="btn btn-success" style="display:none;">Run</button> <!-- Hide Run/Test for new tasks initially -->
+                    <button type="button" id="testTaskBtn" class="btn" style="display:none;">Test</button>
                 </div>
             </form>
         </div>
@@ -421,6 +422,13 @@
         // Log toggle (basic)
         const toggleLogBtn = document.getElementById('toggleLogBtn');
         const logContainer = document.getElementById('logContainer');
+        const taskFormTitle = document.getElementById('taskFormTitle');
+        const saveTaskButton = document.getElementById('saveTaskButton');
+        const cancelEditTaskButton = document.getElementById('cancelEditTaskButton');
+        const runTaskBtn = document.getElementById('runTaskBtn'); // For showing/hiding
+        const testTaskBtn = document.getElementById('testTaskBtn'); // For showing/hiding
+
+        let editingTaskId = null; // To store the ID of the task being edited
 
         // Host Management Elements
         const addHostForm = document.getElementById('addHostForm');
@@ -1250,10 +1258,14 @@
                     <div>
                         <button class="btn btn-sm btn-success run-task-btn" data-id="${task.id}" style="margin-right: 5px;">Run</button>
                         <!-- Edit button will load task into form later -->
-                        <button class="btn btn-sm btn-primary edit-task" data-id="${task.id}" style="margin-right: 5px;">Edit</button>
+                        <button class="btn btn-sm btn-primary edit-task-btn" data-id="${task.id}" style="margin-right: 5px;">Edit</button>
                         <button class="btn btn-sm btn-danger delete-task" data-id="${task.id}">Delete</button>
                     </div>
                 `;
+
+                taskItem.querySelector('.edit-task-btn').addEventListener('click', () => {
+                    loadTaskIntoForm(task);
+                });
                 
                 taskItem.querySelector('.delete-task').addEventListener('click', async () => {
                     const taskId = task.id;
@@ -1369,6 +1381,86 @@
         });
 
         // Function to handle adding/updating a task
+
+        function resetTaskForm() {
+            taskForm.reset();
+            editingTaskId = null;
+            taskFormTitle.textContent = 'Add New Task';
+            saveTaskButton.textContent = 'Save Task';
+            cancelEditTaskButton.style.display = 'none';
+            runTaskBtn.style.display = 'none'; // Hide Run/Test for new tasks
+            testTaskBtn.style.display = 'none';
+
+
+            // Reset path pairs to one empty
+            pathPairsContainer.innerHTML = '';
+            pathPairsContainer.appendChild(createPathPairElement());
+            pathPairsContainer.querySelector('.remove-path').style.display = 'none';
+            
+            // Reset flag buttons
+            flagsButtonContainer.querySelectorAll('.flag-btn.active').forEach(button => {
+                button.classList.remove('active');
+            });
+            // Reset schedule
+            scheduleOffBtn.click();
+            // Reset host dropdowns to default (e.g., first host or localhost)
+            if (currentHosts.length > 0) {
+                sourceHostSelect.value = currentHosts[0].id;
+                destinationHostSelect.value = currentHosts[0].id;
+            }
+        }
+        
+        cancelEditTaskButton.addEventListener('click', resetTaskForm);
+
+        function loadTaskIntoForm(task) {
+            editingTaskId = task.id;
+            taskFormTitle.textContent = 'Edit Task';
+            saveTaskButton.textContent = 'Save Changes';
+            cancelEditTaskButton.style.display = 'inline-block';
+            runTaskBtn.style.display = 'inline-block'; // Show Run/Test for existing tasks
+            testTaskBtn.style.display = 'inline-block';
+
+
+            taskNameInput.value = task.name;
+            sourceHostSelect.value = task.sourceHost;
+            destinationHostSelect.value = task.destinationHost;
+
+            // Populate path pairs
+            pathPairsContainer.innerHTML = '';
+            task.paths.forEach((p, index) => {
+                const pathPairElement = createPathPairElement();
+                pathPairElement.querySelector('.source-path').value = p.source;
+                pathPairElement.querySelector('.destination-path').value = p.destination;
+                // Show remove button if more than one path or if it's not the first one being added
+                pathPairElement.querySelector('.remove-path').style.display = task.paths.length > 1 ? 'inline-block' : 'none';
+                pathPairsContainer.appendChild(pathPairElement);
+            });
+            if (task.paths.length === 0) { // Should not happen based on validation, but good practice
+                pathPairsContainer.appendChild(createPathPairElement());
+                pathPairsContainer.querySelector('.remove-path').style.display = 'none';
+            }
+
+
+            // Set flags
+            flagsButtonContainer.querySelectorAll('.flag-btn').forEach(button => {
+                if (task.flags.includes(button.dataset.flag)) {
+                    button.classList.add('active');
+                } else {
+                    button.classList.remove('active');
+                }
+            });
+
+            // Set schedule
+            if (task.scheduleEnabled) {
+                scheduleOnBtn.click();
+                scheduleDetailsInput.value = task.scheduleDetails || '';
+            } else {
+                scheduleOffBtn.click();
+            }
+            // Scroll to the top of the form for better UX
+            taskEditorFormContainer.scrollIntoView({ behavior: 'smooth' });
+        }
+
         async function handleSaveTask(event) {
             event.preventDefault();
             const taskName = taskNameInput.value.trim();
@@ -1405,12 +1497,15 @@
                 flags: selectedFlags,
                 scheduleEnabled: scheduleEnabled,
                 scheduleDetails: scheduleEnabled ? scheduleDetailsInput.value.trim() : undefined,
+                // automationConfigId and triggerFilePath are not set/modified by this form
             };
 
+            const url = editingTaskId ? `/api/tasks/${editingTaskId}` : '/api/tasks';
+            const method = editingTaskId ? 'PUT' : 'POST';
+
             try {
-                // For now, always POST. Update logic will come later.
-                const response = await fetch('/api/tasks', {
-                    method: 'POST',
+                const response = await fetch(url, {
+                    method: method,
                     headers: {
                         'Content-Type': 'application/json',
                     },
@@ -1422,24 +1517,12 @@
                     throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
                 }
                 
-                taskForm.reset(); // Reset form fields
-                // Reset path pairs to one empty
-                pathPairsContainer.innerHTML = '';
-                pathPairsContainer.appendChild(createPathPairElement());
-                pathPairsContainer.querySelector('.remove-path').style.display = 'none';
-                
-                // Reset flag buttons
-                flagsButtonContainer.querySelectorAll('.flag-btn.active').forEach(button => {
-                    button.classList.remove('active');
-                });
-
-                // Reset schedule
-                scheduleOffBtn.click(); 
+                resetTaskForm();
                 fetchAndRenderTasks(); // Refresh the tasks list
-                showMessage('Task saved successfully.', 'success');
+                showMessage(`Task ${editingTaskId ? 'updated' : 'saved'} successfully.`, 'success');
             } catch (error) {
-                console.error('Error saving task:', error);
-                showMessage(`Error saving task: ${error.message}`, 'error');
+                console.error(`Error ${editingTaskId ? 'updating' : 'saving'} task:`, error);
+                showMessage(`Error ${editingTaskId ? 'updating' : 'saving'} task: ${error.message}`, 'error');
             }
         }
 

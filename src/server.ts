@@ -693,6 +693,59 @@ app.delete('/api/tasks/:taskId', async (req, res) => {
   res.status(204).send(); // No content, successful deletion
 });
 
+app.put('/api/tasks/:taskId', async (req, res) => {
+  const { taskId } = req.params;
+  const {
+    name,
+    sourceHost,
+    destinationHost,
+    paths,
+    flags,
+    scheduleEnabled,
+    scheduleDetails,
+    // automationConfigId and triggerFilePath are typically set on creation by automation
+    // and usually not directly editable by the user in the main task form.
+    // If they need to be editable, they should be included here.
+  } = req.body;
+
+  if (!name) {
+    return res.status(400).json({ message: 'Task name is required' });
+  }
+  if (!sourceHost || !destinationHost) {
+    return res.status(400).json({ message: 'Source and Destination hosts are required' });
+  }
+  if (!paths || !Array.isArray(paths) || paths.length === 0) {
+    return res.status(400).json({ message: 'At least one source/destination path pair is required' });
+  }
+  for (const p of paths) {
+    if (typeof p.source !== 'string' || typeof p.destination !== 'string') {
+      return res.status(400).json({ message: 'Each path pair must have a source and a destination string.' });
+    }
+  }
+
+  const taskIndex = tasks.findIndex(t => t.id === taskId);
+  if (taskIndex === -1) {
+    return res.status(404).json({ message: 'Task not found.' });
+  }
+
+  // Preserve automation-related fields if they exist and are not part of the update payload
+  const existingTask = tasks[taskIndex];
+  tasks[taskIndex] = {
+    ...existingTask, // Keeps original ID, automationConfigId, triggerFilePath
+    name,
+    sourceHost,
+    destinationHost,
+    paths,
+    flags: flags || [],
+    scheduleEnabled: !!scheduleEnabled,
+    scheduleDetails: scheduleEnabled ? scheduleDetails : undefined,
+  };
+
+  await saveData();
+  res.json(tasks[taskIndex]);
+});
+
+
 // --- Rsync Task Execution ---
 interface RsyncExecutionResult {
   pathPair: PathPair;
