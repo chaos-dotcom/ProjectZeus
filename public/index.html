@@ -917,14 +917,31 @@
                     let skippedJobMessages = []; // To store messages for skipped jobs
 
                     if (jobCreationDetails.length > 0) {
+                        console.log("[Automation] Comparing against tasks for this automation:", JSON.parse(JSON.stringify(tasksForThisAutomation)));
                         jobCreationDetails.forEach(jobDetail => {
-                            const existingTask = tasksForThisAutomation.find(t => 
-                                t.triggerFilePath === jobDetail.triggerFilePath && 
-                                t.destinationHostId === jobDetail.destinationHostId &&
-                                t.paths[0]?.source === jobDetail.sourcePath && 
-                                t.paths[0]?.destination === jobDetail.destinationPath
-                            );
+                            console.log("[Automation] Checking proposed jobDetail:", JSON.parse(JSON.stringify(jobDetail)));
+                            const existingTask = tasksForThisAutomation.find(t => {
+                                const pathsMatch = t.paths && t.paths.length > 0 &&
+                                                 t.paths[0].source === jobDetail.sourcePath &&
+                                                 t.paths[0].destination === jobDetail.destinationPath;
+                                const isMatch = t.triggerFilePath === jobDetail.triggerFilePath &&
+                                      t.destinationHostId === jobDetail.destinationHostId &&
+                                      pathsMatch;
+                                
+                                if (isMatch) {
+                                    console.log("[Automation] Found matching existingTask:", JSON.parse(JSON.stringify(t)));
+                                } else if (t.triggerFilePath === jobDetail.triggerFilePath && t.destinationHostId === jobDetail.destinationHostId) {
+                                    // Log details if trigger and destination host match but paths don't, to see the difference
+                                    console.log("[Automation] Partial match (trigger & dest host) but paths differ or missing:");
+                                    console.log("[Automation] Existing Task Path[0]:", t.paths ? JSON.parse(JSON.stringify(t.paths[0])) : "undefined/empty");
+                                    console.log("[Automation] JobDetail sourcePath:", jobDetail.sourcePath);
+                                    console.log("[Automation] JobDetail destinationPath:", jobDetail.destinationPath);
+                                }
+                                return isMatch;
+                            });
+
                             if (!existingTask) {
+                                console.log("[Automation] No existing exact task found. Proposing as new.");
                                 newJobsToProposeDetails.push(jobDetail);
                             } else {
                                 // Use the existing task's name in the skipped message
