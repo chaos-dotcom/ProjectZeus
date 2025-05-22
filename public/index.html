@@ -795,8 +795,9 @@
             try {
                 const response = await fetch('/api/automation-configs');
                 if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-                const configs = await response.json();
-                renderAutomationConfigsList(configs);
+                // Update the global automationConfigs array
+                automationConfigs = await response.json(); 
+                renderAutomationConfigsList(automationConfigs);
             } catch (error) {
                 console.error('Error fetching automation configs:', error);
                 automationConfigsListElement.innerHTML = '<p>Error loading automation configurations.</p>';
@@ -861,7 +862,12 @@
             });
         }
         
-        async function executeAutomationScan(config) { // config is an AutomationConfig object
+        async function executeAutomationScan(initialConfig) { // initialConfig is an AutomationConfig object passed from the button
+            // Fetch the latest version of the config from the client-side in-memory store
+            // This ensures we use the most up-to-date config data available to the client.
+            const config = automationConfigs.find(c => c.id === initialConfig.id) || initialConfig;
+            console.log("[Automation] Using config for scan:", JSON.parse(JSON.stringify(config))); // Log the actual config being used
+
             const scanButton = document.querySelector(`.scan-now-btn[data-config-id="${config.id}"]`);
             if(scanButton) {
                 scanButton.textContent = 'Scanning...';
