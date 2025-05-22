@@ -993,14 +993,20 @@
                                         baseFlags = ['-a', '-v', '-u']; // Remove --delete for turbosort
                                     }
                                     // --- DEBUGGING: Log config properties for flag generation ---
-                                    console.log(`[Automation UI Flags] Config ID: ${config.id}, Type: ${config.type}, ProcessedLogFile: ${config.processedLogFile}, ScanPath: ${config.scanDirectoryPath}`);
+                                    console.log(`[Automation UI Flags] Config ID: ${config.id}, Type: ${config.type}`);
                                     // --- END DEBUGGING ---
-                                    if (config.type === 'turbosort' && config.processedLogFile && config.scanDirectoryPath) {
-                                        // Construct the exclude file path as the backend would for display purposes.
-                                        // This assumes Unix-like paths.
-                                        const excludeFilePath = `${config.scanDirectoryPath}/${config.processedLogFile}`.replace(/\/\//g, '/');
-                                        baseFlags.push(`--exclude-from='${excludeFilePath}'`);
-                                        console.log(`[Automation UI Flags] Added --exclude-from for ${config.id}: ${excludeFilePath}`); // DEBUG
+                                    if (config.type === 'turbosort') {
+                                        // For turbosort, always add --itemize-changes for output parsing
+                                        if (!baseFlags.includes('--itemize-changes')) {
+                                            baseFlags.push('--itemize-changes');
+                                        }
+                                        // Construct the project-specific exclude file path for display,
+                                        // mirroring the server's runtime logic.
+                                        // parentDir is the project's source path (e.g., /Volumes/Backup3/tusd-data/FFERN/Summer_25_Review)
+                                        // projectFolderName is the basename (e.g., Summer_25_Review)
+                                        const projectSpecificExcludeFile = `${parentDir}/.${projectFolderName}_processed.txt`;
+                                        baseFlags.push(`--exclude-from='${projectSpecificExcludeFile}'`);
+                                        console.log(`[Automation UI Flags] Added turbosort flags for ${config.id}: --itemize-changes, --exclude-from='${projectSpecificExcludeFile}'`); // DEBUG
                                     }
                                     return baseFlags;
                                 })(),
