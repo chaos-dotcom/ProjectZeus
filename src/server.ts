@@ -80,6 +80,27 @@ async function loadData(): Promise<void> {
 }
 
 // --- Scanner Functionality ---
+
+// Helper function for recursive local directory scanning
+async function getFilesInDirectoryLocalRecursive(dirPath: string, fileExtensions: string[]): Promise<string[]> {
+  let files: string[] = [];
+  try {
+    const entries = await fs.promises.readdir(dirPath, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(dirPath, entry.name);
+      if (entry.isDirectory()) {
+        files = files.concat(await getFilesInDirectoryLocalRecursive(fullPath, fileExtensions));
+      } else if (entry.isFile() && fileExtensions.some(ext => entry.name.endsWith(ext))) {
+        files.push(fullPath);
+      }
+    }
+  } catch (error: any) {
+    // Log errors for specific subdirectories but continue scanning others if possible
+    console.warn(`Warning: Could not read directory ${dirPath}: ${error.message}`);
+  }
+  return files;
+}
+
 async function scanDirectoryOnHost(host: Host, directoryPath: string): Promise<string[]> {
   const privateKeyPath = path.join(os.homedir(), '.ssh', 'websync_id_rsa');
   if (!fs.existsSync(privateKeyPath)) {
@@ -94,22 +115,20 @@ async function scanDirectoryOnHost(host: Host, directoryPath: string): Promise<s
 
   if (host.id === 'localhost') {
     try {
-      const entries = await fs.promises.readdir(directoryPath, { withFileTypes: true });
-      const files = entries
-        .filter(entry => entry.isFile() && (entry.name.endsWith('.livework') || entry.name.endsWith('.turbosort')))
-        .map(entry => path.join(directoryPath, entry.name));
-      return files;
+      return await getFilesInDirectoryLocalRecursive(directoryPath, ['.livework', '.turbosort']);
     } catch (error: any) {
-      console.error(`Error scanning local directory ${directoryPath}:`, error);
-      throw new Error(`Failed to scan local directory ${directoryPath}: ${error.message}`);
+      // This top-level catch is for errors that prevent starting the scan at all (e.g., root path doesn't exist)
+      console.error(`Error starting local recursive scan for directory ${directoryPath}:`, error);
+      throw new Error(`Failed to scan local directory ${directoryPath} recursively: ${error.message}`);
     }
   } else {
-    // Remote host: Use SSH to execute 'find'
+    // Remote host: Use SSH to execute 'find' (recursively by default)
     // Ensure directoryPath is properly escaped for the remote shell.
     // Using single quotes around directoryPath for the remote find command.
     const escapedDirectoryPath = directoryPath.replace(/'/g, "'\\''"); // Basic escaping for single quotes
 
-    const findCommand = `find '${escapedDirectoryPath}' -maxdepth 1 -type f \\( -name '*.livework' -o -name '*.turbosort' \\)`;
+    // Removed -maxdepth 1 to make the find command recursive
+    const findCommand = `find '${escapedDirectoryPath}' -type f \\( -name '*.livework' -o -name '*.turbosort' \\)`;
     const portOption = host.port ? `-p ${host.port}` : '';
     // BatchMode=yes ensures ssh doesn't hang asking for a password if key auth fails
     const sshCommand = `ssh -i "${privateKeyPath}" -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${portOption} ${host.user}@${host.hostname} "${findCommand}"`;
