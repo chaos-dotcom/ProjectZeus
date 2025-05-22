@@ -818,6 +818,7 @@ async function executeRsyncCommand(task: Task, pathPair: PathPair, hostsList: Ho
   const flagsString = task.flags.join(' ');
   let rsyncCommand: string;
   let finalFlags = [...task.flags]; // Start with task's flags
+  const privateKeyPath = path.join(os.homedir(), '.ssh', 'websync_id_rsa'); // Define earlier for use in touch
 
   // Check if this task is from a .turbosort automation and needs an exclude file
   if (task.automationConfigId) {
@@ -834,6 +835,35 @@ async function executeRsyncCommand(task: Task, pathPair: PathPair, hostsList: Ho
 
     if (automationConfig && automationConfig.type === 'turbosort' && automationConfig.processedLogFile && automationConfig.scanDirectoryPath) {
       let excludeFilePathOnSource = path.join(automationConfig.scanDirectoryPath, automationConfig.processedLogFile);
+      
+      // --- Ensure the exclude file exists on the source host BEFORE rsync ---
+      const touchCommand = `touch '${excludeFilePathOnSource.replace(/'/g, "'\\''")}'`;
+      let commandToTouchFile = touchCommand;
+      const sourceHostForTouch = hosts.find(h => h.id === task.sourceHost); // Get source host object
+
+      if (sourceHostForTouch && sourceHostForTouch.id !== 'localhost') {
+        const sshPortOption = sourceHostForTouch.port ? `-p ${sourceHostForTouch.port}` : '';
+        commandToTouchFile = `ssh -i "${privateKeyPath}" ${sshPortOption} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes ${sourceHostForTouch.user}@${sourceHostForTouch.hostname} "${touchCommand.replace(/"/g, '\\"')}"`;
+      }
+      
+      console.log(`[Rsync Exec] Ensuring exclude file exists on ${sourceHostForTouch?.alias || 'localhost'}: ${commandToTouchFile.split(' ')[0]} ...`);
+      try {
+        await new Promise<void>((resolveTouch, rejectTouch) => {
+          exec(commandToTouchFile, (touchError, touchStdout, touchStderr) => {
+            if (touchError) {
+              // Log the error but proceed; rsync will fail if it can't read it, but at least we tried.
+              console.error(`[Rsync Exec] Failed to touch exclude file ${excludeFilePathOnSource} on ${sourceHostForTouch?.alias || 'localhost'}: ${touchStderr || touchError.message}`);
+            } else {
+              console.log(`[Rsync Exec] Successfully ensured exclude file ${excludeFilePathOnSource} exists on ${sourceHostForTouch?.alias || 'localhost'}`);
+            }
+            resolveTouch(); 
+          });
+        });
+      } catch (e) {
+        console.error(`[Rsync Exec] Error during pre-rsync touch of exclude file for task ${task.name}:`, e);
+      }
+      // --- End ensure exclude file exists ---
+
       finalFlags.push(`--exclude-from='${excludeFilePathOnSource.replace(/'/g, "'\\''")}'`);
       console.log(`[Rsync Exec] ADDED --exclude-from='${excludeFilePathOnSource}' to flags for task ${task.id}`); // DEBUG
     } else {
