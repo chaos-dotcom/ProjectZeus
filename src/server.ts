@@ -678,6 +678,13 @@ async function executeRsyncCommand(task: Task, pathPair: PathPair, hostsList: Ho
     return { pathPair, success: false, stdout: '', stderr: 'Source or destination host not found.', command: '' };
   }
 
+  // Check for remote-to-remote scenario, which is not supported by the current rsync execution model
+  if (sourceHostObj.id !== 'localhost' && destinationHostObj.id !== 'localhost') {
+    const errMsg = 'Remote-to-remote transfers (where neither source nor destination is "Localhost") are not currently supported.';
+    console.error(`Rsync execution error for task ${task.name}: ${errMsg}`);
+    return { pathPair, success: false, stdout: '', stderr: errMsg, command: 'N/A (Remote-to-remote)' };
+  }
+
   const privateKeyPath = path.join(os.homedir(), '.ssh', 'websync_id_rsa');
   if (!fs.existsSync(privateKeyPath)) {
     // This key is essential for remote operations.
