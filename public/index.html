@@ -364,10 +364,44 @@
                             }
                         }
                     });
-                    // Placeholder for SSH setup button
-                     hostItem.querySelector('.btn-ssh')?.addEventListener('click', () => {
-                        alert(`SSH Setup for ${host.alias} - Not implemented yet.`);
-                    });
+                    // SSH setup button
+                    const sshButton = hostItem.querySelector('.btn-ssh');
+                    if (sshButton) {
+                        sshButton.addEventListener('click', async () => {
+                            const password = prompt(`Enter password for ${host.user}@${host.hostname}:`);
+                            if (password === null) { // User pressed cancel
+                                return;
+                            }
+                            if (!password) {
+                                alert('Password cannot be empty.');
+                                return;
+                            }
+
+                            try {
+                                sshButton.textContent = 'Setting up...';
+                                sshButton.disabled = true;
+                                const response = await fetch(`/api/hosts/${host.id}/ssh-copy-id`, {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                    },
+                                    body: JSON.stringify({ password }),
+                                });
+                                
+                                const result = await response.json();
+                                if (!response.ok) {
+                                    throw new Error(result.message || `HTTP error! status: ${response.status}`);
+                                }
+                                alert(result.message);
+                            } catch (err) {
+                                console.error('SSH Setup Error:', err);
+                                alert(`Error during SSH setup: ${err.message}`);
+                            } finally {
+                                sshButton.textContent = 'SSH Setup';
+                                sshButton.disabled = false;
+                            }
+                        });
+                    }
                 }
                 hostsListElement.appendChild(hostItem);
             });

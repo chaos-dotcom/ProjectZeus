@@ -1,5 +1,8 @@
 import express from 'express';
 import path from 'path';
+import { exec } from 'child_process';
+import fs from 'fs';
+import os from 'os';
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -84,6 +87,72 @@ app.delete('/api/hosts/:id', (req, res) => {
   }
   hosts.splice(hostIndex, 1);
   res.status(204).send(); // No content
+});
+
+// SSH Key Copy ID
+app.post('/api/hosts/:id/ssh-copy-id', async (req, res) => {
+  const { id } = req.params;
+  const { password } = req.body;
+
+  if (!password) {
+    return res.status(400).json({ message: 'Password is required.' });
+  }
+
+  const host = hosts.find(h => h.id === id);
+  if (!host || host.id === 'localhost') {
+    return res.status(404).json({ message: 'Host not found or operation not applicable to Localhost.' });
+  }
+
+  const privateKeyPath = path.join(os.homedir(), '.ssh', 'websync_id_rsa');
+  const publicKeyPath = `${privateKeyPath}.pub`;
+
+  try {
+    // Step 1: Ensure SSH key pair exists for the application
+    if (!fs.existsSync(publicKeyPath)) {
+      await new Promise<void>((resolve, reject) => {
+        // Generate a new key pair without a passphrase
+        // Note: -b 2048 for quicker generation in dev; consider 4096 for production.
+        exec(`ssh-keygen -t rsa -b 2048 -f "${privateKeyPath}" -N ""`, (error, stdout, stderr) => {
+          if (error) {
+            console.error(`ssh-keygen error: ${stderr}`);
+            return reject(new Error(`Failed to generate SSH key pair: ${stderr}`));
+          }
+          console.log(`ssh-keygen output: ${stdout}`);
+          resolve();
+        });
+      });
+    }
+
+    // Step 2: Copy the public key using sshpass and ssh-copy-id
+    // WARNING: Using sshpass with a password directly in a command is a security risk.
+    // The -o StrictHostKeyChecking=no and UserKnownHostsFile=/dev/null are used to bypass host key prompts.
+    // This also has security implications and should be handled carefully in production.
+    const portOption = host.port ? `-p ${host.port}` : '';
+    const sshCopyIdCommand = `sshpass -p '${password}' ssh-copy-id -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i "${publicKeyPath}" ${portOption} ${host.user}@${host.hostname}`;
+    
+    console.log(`Executing: ${sshCopyIdCommand.replace(password, '********')}`); // Log command without password
+
+    await new Promise<void>((resolve, reject) => {
+      exec(sshCopyIdCommand, (error, stdout, stderr) => {
+        if (error) {
+          console.error(`ssh-copy-id error: ${stderr}`);
+          // Try to provide a more user-friendly error from stderr
+          if (stderr.toLowerCase().includes('permission denied')) {
+            return reject(new Error('Permission denied. Please check the password and user permissions.'));
+          }
+          return reject(new Error(`Failed to copy SSH ID: ${stderr || error.message}`));
+        }
+        console.log(`ssh-copy-id output: ${stdout}`);
+        resolve();
+      });
+    });
+
+    res.json({ message: `SSH ID successfully copied to ${host.alias} (${host.user}@${host.hostname}).` });
+
+  } catch (error: any) {
+    console.error('Error in ssh-copy-id process:', error);
+    res.status(500).json({ message: error.message || 'An unexpected error occurred during SSH key copy.' });
+  }
 });
 
 
