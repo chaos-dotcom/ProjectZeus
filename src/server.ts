@@ -982,7 +982,7 @@ async function executeRsyncCommand(task: Task, pathPair: PathPair, hostsList: Ho
                       console.error(`Failed to append to processed log file ${excludeFilePathOnSource} on ${sourceHostObj.alias}: ${appendStderr || appendError.message}`);
                       // Don't mark rsync as failed, but log this issue.
                     } else {
-                      console.log(`Successfully appended "${projectFolderName}/" to ${excludeFilePathOnSource} on ${sourceHostObj.alias}`);
+                      console.log(`Successfully appended transferred files to ${excludeFilePathOnSource} on ${sourceHostObj.alias}`);
                     }
                     resolveAppend(); 
                   });
