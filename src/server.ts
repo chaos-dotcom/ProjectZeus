@@ -719,7 +719,7 @@ async function executeRsyncCommand(task: Task, pathPair: PathPair, hostsList: Ho
   const rsyncSshCommand = `ssh -i "${privateKeyPath}" ${sshPortForRsync ? `-p ${sshPortForRsync}` : ''} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null`;
   
   const flagsString = task.flags.join(' ');
-  let rsyncCommand;
+  let rsyncCommand: string;
 
   if (sourceHostObj.id !== 'localhost' && destinationHostObj.id !== 'localhost') {
     // Remote-to-Remote: SSH into sourceHostObj and execute rsync from there to destinationHostObj
