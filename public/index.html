@@ -885,9 +885,12 @@
                 return;
             }
 
+            const url = editingAutomationConfigId ? `/api/automation-configs/${editingAutomationConfigId}` : '/api/automation-configs';
+            const method = editingAutomationConfigId ? 'PUT' : 'POST';
+
             try {
-                const response = await fetch('/api/automation-configs', {
-                    method: 'POST',
+                const response = await fetch(url, {
+                    method: method,
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(newConfigData)
                 });
@@ -895,14 +898,11 @@
                     const errorData = await response.json();
                     throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
                 }
-                addAutomationConfigForm.reset(); // Clear the form
-                automationConfigScanHostSelect.value = currentHosts.length > 0 ? currentHosts[0].id : ''; // Reset dropdown
-                // Clear multi-select for destination hosts
-                Array.from(automationConfigDestHostsSelect.options).forEach(option => option.selected = false);
+                resetAutomationConfigForm();
                 fetchAndRenderAutomationConfigs(); // Refresh the list
             } catch (error) {
-                console.error('Error saving automation config:', error);
-                alert(`Error saving automation configuration: ${error.message}`);
+                console.error(`Error ${editingAutomationConfigId ? 'updating' : 'saving'} automation config:`, error);
+                alert(`Error ${editingAutomationConfigId ? 'updating' : 'saving'} automation configuration: ${error.message}`);
             }
         });
 
