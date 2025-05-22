@@ -927,10 +927,13 @@
                             finalDestinationPath = finalDestinationPath.replace(/\/\//g, '/');
 
 
+                            // Ensure sourcePath for rsync has a trailing slash to copy contents, not the folder itself
+                            const rsyncSourcePath = parentDir.endsWith('/') ? parentDir : parentDir + '/';
+
                             jobCreationDetails.push({
                                 taskName: `Auto: ${config.name} - ${projectFolderName} to ${destHostAlias}`,
                                 sourceHostId: config.scanHostId,
-                                sourcePath: parentDir, // The whole project folder
+                                sourcePath: rsyncSourcePath, // Use the path with a trailing slash
                                 destinationHostId: destHostId,
                                 destinationPath: finalDestinationPath,
                                 flags: ['-a', '-v', '--delete'], // Example default flags, no -z
@@ -991,8 +994,13 @@
                         jobCreationDetails.forEach(jobDetail => {
                             console.log("[Automation] Checking proposed jobDetail:", JSON.parse(JSON.stringify(jobDetail)));
                             const existingTask = tasksForThisAutomation.find(t => {
+                                // Normalize paths for comparison (remove trailing slash if present)
+                                const normalize = (p) => p.endsWith('/') ? p.slice(0, -1) : p;
+                                
+                                const jobDetailNormalizedSourcePath = normalize(jobDetail.sourcePath);
+
                                 const pathsMatch = t.paths && t.paths.length > 0 &&
-                                                 t.paths[0].source === jobDetail.sourcePath &&
+                                                 normalize(t.paths[0].source) === jobDetailNormalizedSourcePath &&
                                                  t.paths[0].destination === jobDetail.destinationPath;
                                 // Corrected comparison:
                                 // Task object 't' has 'sourceHost' and 'destinationHost' for IDs.
@@ -1010,7 +1018,7 @@
                                     // Log details if trigger, source host, and destination host match but paths don't
                                     console.log("[Automation] Partial match (trigger, source & dest host) but paths differ or missing:");
                                     console.log("[Automation] Existing Task Path[0]:", t.paths ? JSON.parse(JSON.stringify(t.paths[0])) : "undefined/empty");
-                                    console.log("[Automation] JobDetail sourcePath:", jobDetail.sourcePath);
+                                    console.log("[Automation] JobDetail (normalized) sourcePath:", jobDetailNormalizedSourcePath);
                                     console.log("[Automation] JobDetail destinationPath:", jobDetail.destinationPath);
                                 }
                                 return isMatch;
