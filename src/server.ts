@@ -273,6 +273,61 @@ app.post('/api/hosts/:hostId/list-directory-contents', async (req, res) => {
   }
 });
 
+// --- File Content Reading Functionality ---
+async function readFileContent(host: Host, filePath: string): Promise<string> {
+  const privateKeyPath = path.join(os.homedir(), '.ssh', 'websync_id_rsa');
+
+  if (host.id === 'localhost') {
+    try {
+      return await fs.promises.readFile(filePath, 'utf-8');
+    } catch (error: any) {
+      console.error(`Error reading local file ${filePath}:`, error);
+      throw new Error(`Failed to read local file ${filePath}: ${error.message}`);
+    }
+  } else {
+    // Remote host: Use SSH to execute 'cat <filePath>'
+    const escapedFilePath = filePath.replace(/'/g, "'\\''"); // Basic escaping for single quotes
+    const catCommand = `cat '${escapedFilePath}'`;
+    const portOption = host.port ? `-p ${host.port}` : '';
+    const sshCommand = `ssh -i "${privateKeyPath}" -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${portOption} ${host.user}@${host.hostname} "${catCommand}"`;
+
+    // console.log(`Executing remote file read: ${sshCommand}`); // For debugging
+
+    return new Promise<string>((resolve, reject) => {
+      exec(sshCommand, (error, stdout, stderr) => {
+        if (error) {
+          // stderr might contain useful info from `cat` if the file doesn't exist or isn't readable
+          console.error(`Remote file read exec error for ${host.alias} on path ${filePath}: ${stderr || error.message}`);
+          return reject(new Error(`Failed to read file on ${host.alias}. SSH command failed. ${stderr || error.message}`));
+        }
+        resolve(stdout); // stdout is the file content
+      });
+    });
+  }
+}
+
+app.post('/api/hosts/:hostId/read-file', async (req, res) => {
+  const { hostId } = req.params;
+  const { filePath } = req.body;
+
+  if (!filePath) {
+    return res.status(400).json({ message: 'filePath is required in the request body.' });
+  }
+
+  const host = hosts.find(h => h.id === hostId);
+  if (!host) {
+    return res.status(404).json({ message: 'Host not found.' });
+  }
+
+  try {
+    const content = await readFileContent(host, filePath);
+    res.type('text/plain').send(content); // Send as plain text
+  } catch (error: any) {
+    console.error(`Error in read-file endpoint for host ${hostId}, path ${filePath}:`, error);
+    res.status(500).json({ message: error.message || 'An unexpected error occurred during file read.' });
+  }
+});
+
 // --- Automation Config API Endpoints ---
 app.get('/api/automation-configs', (req, res) => {
   res.json(automationConfigs);
