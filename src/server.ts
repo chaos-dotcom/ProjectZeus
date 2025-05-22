@@ -31,7 +31,54 @@ interface Task {
   // Add other fields like lastRun, status, etc. later
 }
 
-let tasks: Task[] = []; // In-memory store for tasks
+let tasks: Task[] = []; // Will be populated by loadData
+
+// --- Data Persistence ---
+const DATA_FILE_PATH = path.join(__dirname, '..', 'websync-data.json');
+
+async function saveData(): Promise<void> {
+  try {
+    const dataToSave = { hosts, tasks };
+    await fs.promises.writeFile(DATA_FILE_PATH, JSON.stringify(dataToSave, null, 2), 'utf-8');
+    // console.log('Data saved to file.'); // Optional: for debugging
+  } catch (error) {
+    console.error('Error saving data to file:', error);
+  }
+}
+
+async function loadData(): Promise<void> {
+  let loadedHosts: Host[] = [];
+  let loadedTasks: Task[] = [];
+
+  try {
+    if (fs.existsSync(DATA_FILE_PATH)) {
+      const fileContent = await fs.promises.readFile(DATA_FILE_PATH, 'utf-8');
+      const parsedData = JSON.parse(fileContent);
+      loadedHosts = parsedData.hosts || [];
+      loadedTasks = parsedData.tasks || [];
+    }
+  } catch (error) {
+    console.error('Error reading or parsing data file. Initializing with empty/default data.', error);
+  }
+
+  // Ensure 'localhost' is always present and at the beginning.
+  // Its alias can be persisted, but core properties are fixed.
+  const defaultLocalhostAlias = 'Localhost';
+  const localhostFromFile = loadedHosts.find(h => h.id === 'localhost');
+  const currentLocalhostAlias = localhostFromFile ? localhostFromFile.alias : defaultLocalhostAlias;
+
+  const localhostEntry: Host = { id: 'localhost', alias: currentLocalhostAlias, user: '', hostname: 'localhost' };
+  
+  // Filter out any existing localhost entries from loadedHosts to avoid duplicates, then prepend our controlled one.
+  hosts = [localhostEntry, ...loadedHosts.filter(h => h.id !== 'localhost')];
+  tasks = loadedTasks;
+
+  // If the file didn't exist initially or was unparsable and resulted in empty hosts (except our default), save initial state.
+  if (!fs.existsSync(DATA_FILE_PATH) || (loadedHosts.length === 0 && !localhostFromFile)) {
+    await saveData(); 
+  }
+}
+
 
 // --- Host Management ---
 interface Host {
@@ -42,10 +89,7 @@ interface Host {
   port?: number; // Optional port
 }
 
-let hosts: Host[] = [
-  // Add a default localhost entry for convenience in tasks
-  { id: 'localhost', alias: 'Localhost', user: '', hostname: 'localhost' }
-]; // In-memory store for hosts
+let hosts: Host[] = []; // Will be populated by loadData
 
 // GET all hosts
 app.get('/api/hosts', (req, res) => {
@@ -53,7 +97,7 @@ app.get('/api/hosts', (req, res) => {
 });
 
 // POST a new host
-app.post('/api/hosts', (req, res) => {
+app.post('/api/hosts', async (req, res) => {
   const { alias, user, hostname, port } = req.body;
 
   if (!alias || !user || !hostname) {
@@ -114,12 +158,12 @@ app.put('/api/hosts/:id', (req, res) => {
       if (alias) hosts[hostIndex].alias = alias;
   }
 
-
+  await saveData();
   res.json(hosts[hostIndex]);
 });
 
 // DELETE a host
-app.delete('/api/hosts/:id', (req, res) => {
+app.delete('/api/hosts/:id', async (req, res) => {
   const { id } = req.params;
   // Prevent deleting the default 'localhost' entry if it's special
   if (id === 'localhost') {
@@ -130,6 +174,7 @@ app.delete('/api/hosts/:id', (req, res) => {
     return res.status(404).json({ message: 'Host not found' });
   }
   hosts.splice(hostIndex, 1);
+  await saveData();
   res.status(204).send(); // No content
 });
 
@@ -208,7 +253,7 @@ app.get('/api/tasks', (req, res) => {
 });
 
 // POST a new task
-app.post('/api/tasks', (req, res) => {
+app.post('/api/tasks', async (req, res) => {
   const {
     name,
     sourceHost,
@@ -246,6 +291,7 @@ app.post('/api/tasks', (req, res) => {
     scheduleDetails: scheduleEnabled ? scheduleDetails : undefined,
   };
   tasks.push(newTask);
+  await saveData();
   res.status(201).json(newTask);
 });
 
@@ -259,6 +305,11 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
 });
 
-app.listen(port, () => {
-  console.log(`WebSync TS server listening at http://localhost:${port}`);
-});
+async function startServer() {
+  await loadData();
+  app.listen(port, () => {
+    console.log(`WebSync TS server listening at http://localhost:${port}`);
+  });
+}
+
+startServer();
