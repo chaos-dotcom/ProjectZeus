@@ -1,5 +1,5 @@
 {
-  "name": "websync-ts",
+  "name": "project-zeus",
   "version": "0.1.0",
   "description": "A modern rsync task manager built with TypeScript.",
   "main": "dist/server.js",
