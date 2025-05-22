@@ -860,14 +860,58 @@ async function executeRsyncCommand(task: Task, pathPair: PathPair, hostsList: Ho
   }
 
   return new Promise<RsyncExecutionResult>((resolve) => {
-    exec(rsyncCommand, (error, stdout, stderr) => {
-      if (error) {
-        console.error(`Rsync execution error for task ${task.name} (${pathPair.source} -> ${pathPair.destination}): ${stderr || error.message}`);
-        resolve({ pathPair, success: false, stdout, stderr: stderr || error.message, command: rsyncCommand });
-      } else {
-        resolve({ pathPair, success: true, stdout, stderr, command: rsyncCommand });
-      }
-    });
+    exec(rsyncCommand, async (error, stdout, stderr) => { // Make callback async
+        if (error) {
+          console.error(`Rsync execution error for task ${task.name} (${pathPair.source} -> ${pathPair.destination}): ${stderr || error.message}`);
+          resolve({ pathPair, success: false, stdout, stderr: stderr || error.message, command: rsyncCommand });
+        } else {
+          // If successful and part of a .turbosort automation, update the processedLogFile
+          if (task.automationConfigId) {
+            const automationConfig = automationConfigs.find(ac => ac.id === task.automationConfigId);
+            // Ensure sourceHostObj is available in this scope. It's a parameter to executeRsyncCommand.
+            const sourceHostObj = hosts.find(h => h.id === task.sourceHost); // Re-fetch or ensure it's passed if not in scope
+
+            if (automationConfig && sourceHostObj && automationConfig.type === 'turbosort' && automationConfig.processedLogFile && task.triggerFilePath) {
+              try {
+                // pathPair.source is the absolute path to the project folder on source, e.g., /scan/path/projectA/
+                // We need the name of the folder that pathPair.source points to.
+                let projectFolderName = path.basename(pathPair.source.endsWith('/') ? pathPair.source.slice(0, -1) : pathPair.source);
+                
+                const processedEntry = `${projectFolderName}/\n`; // Add trailing slash for directory pattern and newline
+                // Construct the exclude file path on the source host.
+                // It's assumed to be relative to the scanDirectoryPath if not absolute.
+                // For simplicity, placing it inside scanDirectoryPath.
+                const excludeFilePathOnSource = path.join(automationConfig.scanDirectoryPath, automationConfig.processedLogFile);
+                
+                const appendCommand = `echo '${processedEntry.replace(/'/g, "'\\''")}' >> '${excludeFilePathOnSource.replace(/'/g, "'\\''")}'`;
+                let commandToRunOnSourceHost = appendCommand;
+                const privateKeyPath = path.join(os.homedir(), '.ssh', 'websync_id_rsa'); // Define here or ensure accessible
+
+                if (sourceHostObj.id !== 'localhost') {
+                  const sshPortOption = sourceHostObj.port ? `-p ${sourceHostObj.port}` : '';
+                  commandToRunOnSourceHost = `ssh -i "${privateKeyPath}" ${sshPortOption} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes ${sourceHostObj.user}@${sourceHostObj.hostname} "${appendCommand.replace(/"/g, '\\"')}"`;
+                }
+                
+                console.log(`Appending to processed log on ${sourceHostObj.alias}: ${commandToRunOnSourceHost.split(' ')[0]} ...`);
+                await new Promise<void>((resolveAppend, rejectAppend) => {
+                  exec(commandToRunOnSourceHost, (appendError, appendStdout, appendStderr) => {
+                    if (appendError) {
+                      console.error(`Failed to append to processed log file ${excludeFilePathOnSource} on ${sourceHostObj.alias}: ${appendStderr || appendError.message}`);
+                      // Don't mark rsync as failed, but log this issue.
+                    } else {
+                      console.log(`Successfully appended "${projectFolderName}/" to ${excludeFilePathOnSource} on ${sourceHostObj.alias}`);
+                    }
+                    resolveAppend(); 
+                  });
+                });
+              } catch (e) {
+                console.error(`Error during processed log update for task ${task.name}:`, e);
+              }
+            }
+          }
+          resolve({ pathPair, success: true, stdout, stderr, command: rsyncCommand });
+        }
+      });
   });
 }
 
