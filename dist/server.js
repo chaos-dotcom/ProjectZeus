@@ -5,15 +5,193 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const path_1 = __importDefault(require("path"));
+const child_process_1 = require("child_process");
+const fs_1 = __importDefault(require("fs"));
+const os_1 = __importDefault(require("os"));
 const app = (0, express_1.default)();
 const port = process.env.PORT || 3000;
+// Middleware to parse JSON bodies
+app.use(express_1.default.json());
 // Serve static files from the 'public' directory
 app.use(express_1.default.static(path_1.default.join(__dirname, '..', 'public')));
+let tasks = []; // In-memory store for tasks
+let hosts = [
+    // Add a default localhost entry for convenience in tasks
+    { id: 'localhost', alias: 'Localhost', user: '', hostname: 'localhost' }
+]; // In-memory store for hosts
+// GET all hosts
+app.get('/api/hosts', (req, res) => {
+    res.json(hosts);
+});
+// POST a new host
+app.post('/api/hosts', (req, res) => {
+    const { alias, user, hostname, port } = req.body;
+    if (!alias || !user || !hostname) {
+        return res.status(400).json({ message: 'Alias, User, and Hostname are required' });
+    }
+    if (port && (isNaN(parseInt(port, 10)) || parseInt(port, 10) <= 0 || parseInt(port, 10) > 65535)) {
+        return res.status(400).json({ message: 'Port must be a valid number between 1 and 65535' });
+    }
+    const newHost = {
+        id: Date.now().toString(),
+        alias,
+        user,
+        hostname,
+        port: port ? parseInt(port, 10) : undefined,
+    };
+    hosts.push(newHost);
+    res.status(201).json(newHost);
+});
+// PUT (update) an existing host
+app.put('/api/hosts/:id', (req, res) => {
+    const { id } = req.params;
+    const { alias, user, hostname, port } = req.body;
+    if (id === 'localhost' && (req.body.user || req.body.hostname || req.body.port)) {
+        // Allow changing alias of localhost, but not other critical fields.
+        if (Object.keys(req.body).some(key => !['alias'].includes(key))) {
+            return res.status(400).json({ message: 'Only the alias of Localhost can be modified.' });
+        }
+    }
+    if (!alias) { // User and hostname might not be sent if only alias is changing for localhost
+        if (id !== 'localhost' || !req.body.alias) { // if not localhost, or if localhost and no alias sent
+            return res.status(400).json({ message: 'Alias is required' });
+        }
+    }
+    if (id !== 'localhost' && (!user || !hostname)) {
+        return res.status(400).json({ message: 'User and Hostname are required for non-localhost entries' });
+    }
+    if (port && (isNaN(parseInt(port, 10)) || parseInt(port, 10) <= 0 || parseInt(port, 10) > 65535)) {
+        return res.status(400).json({ message: 'Port must be a valid number between 1 and 65535' });
+    }
+    const hostIndex = hosts.findIndex(h => h.id === id);
+    if (hostIndex === -1) {
+        return res.status(404).json({ message: 'Host not found' });
+    }
+    // Update fields
+    hosts[hostIndex].alias = alias || hosts[hostIndex].alias; // Keep old alias if new one not provided (e.g. for localhost)
+    if (id !== 'localhost') {
+        hosts[hostIndex].user = user;
+        hosts[hostIndex].hostname = hostname;
+        hosts[hostIndex].port = port ? parseInt(port, 10) : undefined;
+    }
+    else { // For localhost, only update alias if provided
+        if (alias)
+            hosts[hostIndex].alias = alias;
+    }
+    res.json(hosts[hostIndex]);
+});
+// DELETE a host
+app.delete('/api/hosts/:id', (req, res) => {
+    const { id } = req.params;
+    // Prevent deleting the default 'localhost' entry if it's special
+    if (id === 'localhost') {
+        return res.status(400).json({ message: 'Cannot delete the default Localhost entry.' });
+    }
+    const hostIndex = hosts.findIndex(h => h.id === id);
+    if (hostIndex === -1) {
+        return res.status(404).json({ message: 'Host not found' });
+    }
+    hosts.splice(hostIndex, 1);
+    res.status(204).send(); // No content
+});
+// SSH Key Copy ID
+app.post('/api/hosts/:id/ssh-copy-id', async (req, res) => {
+    const { id } = req.params;
+    const { password } = req.body;
+    if (!password) {
+        return res.status(400).json({ message: 'Password is required.' });
+    }
+    const host = hosts.find(h => h.id === id);
+    if (!host || host.id === 'localhost') {
+        return res.status(404).json({ message: 'Host not found or operation not applicable to Localhost.' });
+    }
+    const privateKeyPath = path_1.default.join(os_1.default.homedir(), '.ssh', 'websync_id_rsa');
+    const publicKeyPath = `${privateKeyPath}.pub`;
+    try {
+        // Step 1: Ensure SSH key pair exists for the application
+        if (!fs_1.default.existsSync(publicKeyPath)) {
+            await new Promise((resolve, reject) => {
+                // Generate a new key pair without a passphrase
+                // Note: -b 2048 for quicker generation in dev; consider 4096 for production.
+                (0, child_process_1.exec)(`ssh-keygen -t rsa -b 2048 -f "${privateKeyPath}" -N ""`, (error, stdout, stderr) => {
+                    if (error) {
+                        console.error(`ssh-keygen error: ${stderr}`);
+                        return reject(new Error(`Failed to generate SSH key pair: ${stderr}`));
+                    }
+                    console.log(`ssh-keygen output: ${stdout}`);
+                    resolve();
+                });
+            });
+        }
+        // Step 2: Copy the public key using sshpass and ssh-copy-id
+        // WARNING: Using sshpass with a password directly in a command is a security risk.
+        // The -o StrictHostKeyChecking=no and UserKnownHostsFile=/dev/null are used to bypass host key prompts.
+        // This also has security implications and should be handled carefully in production.
+        const portOption = host.port ? `-p ${host.port}` : '';
+        const sshCopyIdCommand = `sshpass -p '${password}' ssh-copy-id -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i "${publicKeyPath}" ${portOption} ${host.user}@${host.hostname}`;
+        console.log(`Executing: ${sshCopyIdCommand.replace(password, '********')}`); // Log command without password
+        await new Promise((resolve, reject) => {
+            (0, child_process_1.exec)(sshCopyIdCommand, (error, stdout, stderr) => {
+                if (error) {
+                    console.error(`ssh-copy-id error: ${stderr}`);
+                    // Try to provide a more user-friendly error from stderr
+                    if (stderr.toLowerCase().includes('permission denied')) {
+                        return reject(new Error('Permission denied. Please check the password and user permissions.'));
+                    }
+                    return reject(new Error(`Failed to copy SSH ID: ${stderr || error.message}`));
+                }
+                console.log(`ssh-copy-id output: ${stdout}`);
+                resolve();
+            });
+        });
+        res.json({ message: `SSH ID successfully copied to ${host.alias} (${host.user}@${host.hostname}).` });
+    }
+    catch (error) {
+        console.error('Error in ssh-copy-id process:', error);
+        res.status(500).json({ message: error.message || 'An unexpected error occurred during SSH key copy.' });
+    }
+});
+// --- Task Management --- (Existing code continues)
+// GET all tasks
+app.get('/api/tasks', (req, res) => {
+    res.json(tasks);
+});
+// POST a new task
+app.post('/api/tasks', (req, res) => {
+    const { name, sourceHost, destinationHost, paths, flags, scheduleEnabled, scheduleDetails, } = req.body;
+    if (!name) {
+        return res.status(400).json({ message: 'Task name is required' });
+    }
+    if (!sourceHost || !destinationHost) {
+        return res.status(400).json({ message: 'Source and Destination hosts are required' });
+    }
+    if (!paths || !Array.isArray(paths) || paths.length === 0) {
+        return res.status(400).json({ message: 'At least one source/destination path pair is required' });
+    }
+    // Basic validation for paths
+    for (const p of paths) {
+        if (typeof p.source !== 'string' || typeof p.destination !== 'string') {
+            return res.status(400).json({ message: 'Each path pair must have a source and a destination string.' });
+        }
+    }
+    const newTask = {
+        id: Date.now().toString(),
+        name,
+        sourceHost,
+        destinationHost,
+        paths,
+        flags: flags || [],
+        scheduleEnabled: !!scheduleEnabled,
+        scheduleDetails: scheduleEnabled ? scheduleDetails : undefined,
+    };
+    tasks.push(newTask);
+    res.status(201).json(newTask);
+});
 // A simple API endpoint example
 app.get('/api/hello', (req, res) => {
     res.json({ message: 'Hello from WebSync TS API!' });
 });
-// All other GET requests not handled before will return the React app
+// All other GET requests not handled before will return the main index.html
 app.get('*', (req, res) => {
     res.sendFile(path_1.default.join(__dirname, '..', 'public', 'index.html'));
 });
