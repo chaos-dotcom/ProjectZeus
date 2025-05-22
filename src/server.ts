@@ -13,6 +13,20 @@ app.use(express.json());
 // Serve static files from the 'public' directory
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
+// Serve projectzeus.gif from the project root
+app.get('/projectzeus.gif', (req, res) => {
+  const gifPath = path.join(__dirname, '..', 'projectzeus.gif'); // Resolves to PROJECT_ROOT/projectzeus.gif
+  res.sendFile(gifPath, (err) => {
+    if (err) {
+      console.error('Error sending projectzeus.gif:', err);
+      // Avoid sending HTML error page for a missing image, just end the response.
+      if (!res.headersSent) {
+        res.status(err.status || 404).end();
+      }
+    }
+  });
+});
+
 // --- Task Management ---
 interface PathPair {
   source: string;
