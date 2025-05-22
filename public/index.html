@@ -97,6 +97,22 @@
         .tab-content { display: none; }
         .tab-content.active { display: block; }
 
+        /* Automation Config specific styles */
+        .automation-config-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            border: 1px solid #ddd;
+            background-color: #f9f9f9;
+            margin-bottom: 10px;
+            border-radius: 4px;
+        }
+        .automation-config-item .details { flex-grow: 1; }
+        .automation-config-item .details p { margin: 2px 0; font-size: 0.9em; }
+        .automation-config-item .details strong { font-size: 1em; }
+        .automation-config-item .actions button { margin-left: 5px; }
+
     </style>
 </head>
 <body>
@@ -148,52 +164,46 @@
 
     <!-- Automation Section -->
     <div class="container tab-content" id="automation-section">
-        <h2>Automation</h2>
+        <h2>Automation Configurations</h2>
 
-        <!-- .livework File Automation -->
-        <div class="automation-subsection">
-            <h3>.livework File Automation</h3>
-            <div class="host-form-container"> <!-- Reusing some styles -->
-                <h4>Scan for .livework Files</h4>
-                <form id="liveworkScanForm" class="form-group">
-                    <label for="liveworkScanHostSelect" style="min-width: auto; margin-right: 5px;">Host:</label>
-                    <select id="liveworkScanHostSelect" style="flex-grow: 1; margin-right:10px;"></select>
-                    
-                    <label for="liveworkScanDirectoryPathInput" style="min-width: auto; margin-right: 5px;">Path:</label>
-                    <input type="text" id="liveworkScanDirectoryPathInput" placeholder="/path/to/scan" style="flex-grow: 2; margin-right:10px;" required>
-                    
-                    <button type="submit" id="liveworkExecuteScanButton" class="btn btn-primary">Scan for .livework</button>
-                </form>
-            </div>
-            <h5>Scan Results (.livework):</h5>
-            <div id="liveworkScanResultsList" style="padding:10px; border:1px solid #eee; min-height: 100px; background: #fdfdfd; margin-bottom: 20px;">
-                <p>Scan results for .livework files will appear here.</p>
-            </div>
-            <!-- Placeholder for job creation from template -->
-            <!-- <h4>Create Jobs from Template</h4> -->
+        <div class="host-form-container"> <!-- Reusing some styles for the form -->
+            <h3>Add New Automation Configuration</h3>
+            <form id="addAutomationConfigForm">
+                <div class="form-group">
+                    <label for="automationConfigNameInput">Name:</label>
+                    <input type="text" id="automationConfigNameInput" placeholder="e.g., Project Alpha Livework Scan" required style="flex-grow:2;">
+                </div>
+                <div class="form-group">
+                    <label for="automationConfigTypeSelect">Type:</label>
+                    <select id="automationConfigTypeSelect" style="flex-grow:1; margin-right:10px;">
+                        <option value="livework">.livework files</option>
+                        <option value="turbosort">.turbosort files</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="automationConfigHostSelect">Host:</label>
+                    <select id="automationConfigHostSelect" style="flex-grow:1; margin-right:10px;"></select>
+                </div>
+                <div class="form-group">
+                    <label for="automationConfigPathInput">Directory Path:</label>
+                    <input type="text" id="automationConfigPathInput" placeholder="/path/to/scan/recursively" required style="flex-grow:2;">
+                </div>
+                <div style="text-align: right;">
+                    <button type="submit" class="btn btn-primary">Save Configuration</button>
+                </div>
+            </form>
         </div>
 
-        <!-- .turbosort File Automation -->
-        <div class="automation-subsection">
-            <h3>.turbosort File Automation</h3>
-            <div class="host-form-container"> <!-- Reusing some styles -->
-                <h4>Scan for .turbosort Files</h4>
-                <form id="turbosortScanForm" class="form-group">
-                    <label for="turbosortScanHostSelect" style="min-width: auto; margin-right: 5px;">Host:</label>
-                    <select id="turbosortScanHostSelect" style="flex-grow: 1; margin-right:10px;"></select>
-                    
-                    <label for="turbosortScanDirectoryPathInput" style="min-width: auto; margin-right: 5px;">Path:</label>
-                    <input type="text" id="turbosortScanDirectoryPathInput" placeholder="/path/to/scan" style="flex-grow: 2; margin-right:10px;" required>
-                    
-                    <button type="submit" id="turbosortExecuteScanButton" class="btn btn-primary">Scan for .turbosort</button>
-                </form>
-            </div>
-            <h5>Scan Results (.turbosort):</h5>
-            <div id="turbosortScanResultsList" style="padding:10px; border:1px solid #eee; min-height: 100px; background: #fdfdfd;">
-                <p>Scan results for .turbosort files will appear here.</p>
-            </div>
-            <!-- Placeholder for job creation from template -->
-            <!-- <h4>Create Jobs from Template</h4> -->
+        <h3>Saved Automation Configurations</h3>
+        <div id="automationConfigsList">
+            <!-- Saved configurations will be listed here -->
+            <p>No automation configurations saved yet.</p>
+        </div>
+
+        <hr style="margin: 20px 0;">
+        <h3>Scan Results</h3>
+        <div id="automationScanResultsDisplay" style="padding:10px; border:1px solid #eee; min-height: 100px; background: #fdfdfd;">
+            <p>Scan results will appear here after running a saved automation.</p>
         </div>
     </div>
 
@@ -311,18 +321,13 @@
         let editingHostId = null; // To store the ID of the host being edited
 
         // Automation Elements
-        // .livework
-        const liveworkScanForm = document.getElementById('liveworkScanForm');
-        const liveworkScanHostSelect = document.getElementById('liveworkScanHostSelect');
-        const liveworkScanDirectoryPathInput = document.getElementById('liveworkScanDirectoryPathInput');
-        const liveworkExecuteScanButton = document.getElementById('liveworkExecuteScanButton');
-        const liveworkScanResultsList = document.getElementById('liveworkScanResultsList');
-        // .turbosort
-        const turbosortScanForm = document.getElementById('turbosortScanForm');
-        const turbosortScanHostSelect = document.getElementById('turbosortScanHostSelect');
-        const turbosortScanDirectoryPathInput = document.getElementById('turbosortScanDirectoryPathInput');
-        const turbosortExecuteScanButton = document.getElementById('turbosortExecuteScanButton');
-        const turbosortScanResultsList = document.getElementById('turbosortScanResultsList');
+        const addAutomationConfigForm = document.getElementById('addAutomationConfigForm');
+        const automationConfigNameInput = document.getElementById('automationConfigNameInput');
+        const automationConfigTypeSelect = document.getElementById('automationConfigTypeSelect');
+        const automationConfigHostSelect = document.getElementById('automationConfigHostSelect');
+        const automationConfigPathInput = document.getElementById('automationConfigPathInput');
+        const automationConfigsListElement = document.getElementById('automationConfigsList');
+        const automationScanResultsDisplay = document.getElementById('automationScanResultsDisplay');
 
 
         // Tab Navigation Elements
@@ -592,8 +597,7 @@
 
             sourceHostSelect.innerHTML = '';
             destinationHostSelect.innerHTML = '';
-            liveworkScanHostSelect.innerHTML = ''; 
-            turbosortScanHostSelect.innerHTML = '';
+            automationConfigHostSelect.innerHTML = ''; // For the new automation config form
 
             hosts.forEach(host => {
                 const option = document.createElement('option');
@@ -601,86 +605,152 @@
                 option.textContent = host.alias;
                 sourceHostSelect.appendChild(option.cloneNode(true));
                 destinationHostSelect.appendChild(option.cloneNode(true));
-                liveworkScanHostSelect.appendChild(option.cloneNode(true)); 
-                turbosortScanHostSelect.appendChild(option.cloneNode(true));
+                automationConfigHostSelect.appendChild(option.cloneNode(true));
             });
             // Try to reselect previous values if they still exist
             sourceHostSelect.value = hosts.find(h => h.id === currentSourceVal) ? currentSourceVal : (hosts.length > 0 ? hosts[0].id : '');
             destinationHostSelect.value = hosts.find(h => h.id === currentDestVal) ? currentDestVal : (hosts.length > 0 ? hosts[0].id : '');
-            liveworkScanHostSelect.value = hosts.length > 0 ? hosts[0].id : ''; 
-            turbosortScanHostSelect.value = hosts.length > 0 ? hosts[0].id : '';
+            automationConfigHostSelect.value = hosts.length > 0 ? hosts[0].id : '';
         }
 
         // --- Automation Tab Functionality ---
-        async function handleGenericScan(event, hostSelectElement, pathInputElement, buttonElement, resultsListElement, fileTypeString) {
-            event.preventDefault();
-            const hostId = hostSelectElement.value;
-            const directoryPath = pathInputElement.value.trim();
 
-            if (!hostId) {
-                alert('Please select a host.');
+        async function fetchAndRenderAutomationConfigs() {
+            try {
+                const response = await fetch('/api/automation-configs');
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                const configs = await response.json();
+                renderAutomationConfigsList(configs);
+            } catch (error) {
+                console.error('Error fetching automation configs:', error);
+                automationConfigsListElement.innerHTML = '<p>Error loading automation configurations.</p>';
+            }
+        }
+
+        function renderAutomationConfigsList(configs) {
+            automationConfigsListElement.innerHTML = '';
+            if (configs.length === 0) {
+                automationConfigsListElement.innerHTML = '<p>No automation configurations saved yet.</p>';
                 return;
             }
-            if (!directoryPath) {
-                alert('Please enter a directory path to scan.');
-                return;
-            }
+            configs.forEach(config => {
+                const host = currentHosts.find(h => h.id === config.hostId);
+                const hostAlias = host ? host.alias : 'Unknown Host';
 
-            buttonElement.textContent = 'Scanning...';
-            buttonElement.disabled = true;
-            resultsListElement.innerHTML = '<p>Scanning...</p>';
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'automation-config-item';
+                itemDiv.innerHTML = `
+                    <div class="details">
+                        <strong>${config.name}</strong>
+                        <p>Type: ${config.type === 'livework' ? '.livework files' : '.turbosort files'}</p>
+                        <p>Host: ${hostAlias}</p>
+                        <p>Path: ${config.directoryPath}</p>
+                    </div>
+                    <div class="actions">
+                        <button class="btn btn-success scan-now-btn" data-config-id="${config.id}">Scan Now</button>
+                        <button class="btn btn-danger delete-config-btn" data-config-id="${config.id}">Delete</button>
+                    </div>
+                `;
+
+                itemDiv.querySelector('.scan-now-btn').addEventListener('click', async () => {
+                    await executeAutomationScan(config);
+                });
+
+                itemDiv.querySelector('.delete-config-btn').addEventListener('click', async () => {
+                    if (confirm(`Are you sure you want to delete automation configuration "${config.name}"?`)) {
+                        try {
+                            const res = await fetch(`/api/automation-configs/${config.id}`, { method: 'DELETE' });
+                            if (!res.ok) throw new Error(`Failed to delete config. Status: ${res.status}`);
+                            fetchAndRenderAutomationConfigs(); // Refresh the list
+                        } catch (err) {
+                            console.error('Error deleting automation config:', err);
+                            alert(`Error deleting config: ${err.message}`);
+                        }
+                    }
+                });
+                automationConfigsListElement.appendChild(itemDiv);
+            });
+        }
+        
+        async function executeAutomationScan(config) {
+            const scanButton = document.querySelector(`.scan-now-btn[data-config-id="${config.id}"]`);
+            if(scanButton) {
+                scanButton.textContent = 'Scanning...';
+                scanButton.disabled = true;
+            }
+            automationScanResultsDisplay.innerHTML = `<p>Scanning "${config.name}" on ${currentHosts.find(h=>h.id === config.hostId)?.alias || 'host'} at ${config.directoryPath} for .${config.type} files...</p>`;
 
             try {
-                const response = await fetch(`/api/hosts/${hostId}/scan-directory`, {
+                const response = await fetch(`/api/hosts/${config.hostId}/scan-directory`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ directoryPath }) // Backend currently scans for both
+                    body: JSON.stringify({ directoryPath: config.directoryPath })
                 });
 
                 if (!response.ok) {
                     let errorMessage = `Scan failed. HTTP status: ${response.status}`;
-                    try {
-                        const errorData = await response.json();
-                        errorMessage = errorData.message || JSON.stringify(errorData);
-                    } catch (e) {
-                        const errorText = await response.text();
-                        errorMessage = errorText || errorMessage;
-                    }
+                     try { const errorData = await response.json(); errorMessage = errorData.message || JSON.stringify(errorData); } catch (e) { const errorText = await response.text(); errorMessage = errorText || errorMessage; }
                     throw new Error(errorMessage);
                 }
 
                 let foundFiles = await response.json();
-                // Filter on the client side for now, based on the specific scan type
-                foundFiles = foundFiles.filter(file => file.endsWith(fileTypeString));
+                foundFiles = foundFiles.filter(file => file.endsWith(`.${config.type}`)); // Filter based on config type
 
                 if (foundFiles.length === 0) {
-                    resultsListElement.innerHTML = `<p>No ${fileTypeString} files found in the specified directory.</p>`;
+                    automationScanResultsDisplay.innerHTML = `<p>No .${config.type} files found for configuration "${config.name}".</p>`;
                 } else {
                     const ul = document.createElement('ul');
+                    ul.innerHTML = `<strong>Found for "${config.name}":</strong>`;
                     foundFiles.forEach(file => {
                         const li = document.createElement('li');
                         li.textContent = file;
                         ul.appendChild(li);
                     });
-                    resultsListElement.innerHTML = '';
-                    resultsListElement.appendChild(ul);
+                    automationScanResultsDisplay.innerHTML = '';
+                    automationScanResultsDisplay.appendChild(ul);
                 }
-
             } catch (error) {
-                console.error(`Error scanning directory for ${fileTypeString}:`, error);
-                resultsListElement.innerHTML = `<p style="color:red;">Error: ${error.message}</p>`;
+                console.error('Error executing automation scan:', error);
+                automationScanResultsDisplay.innerHTML = `<p style="color:red;">Error scanning for "${config.name}": ${error.message}</p>`;
             } finally {
-                buttonElement.textContent = `Scan for ${fileTypeString}`;
-                buttonElement.disabled = false;
+                 if(scanButton) {
+                    scanButton.textContent = 'Scan Now';
+                    scanButton.disabled = false;
+                }
             }
         }
 
-        liveworkScanForm.addEventListener('submit', (event) => {
-            handleGenericScan(event, liveworkScanHostSelect, liveworkScanDirectoryPathInput, liveworkExecuteScanButton, liveworkScanResultsList, '.livework');
-        });
+        addAutomationConfigForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const newConfigData = {
+                name: automationConfigNameInput.value.trim(),
+                type: automationConfigTypeSelect.value,
+                hostId: automationConfigHostSelect.value,
+                directoryPath: automationConfigPathInput.value.trim()
+            };
 
-        turbosortScanForm.addEventListener('submit', (event) => {
-            handleGenericScan(event, turbosortScanHostSelect, turbosortScanDirectoryPathInput, turbosortExecuteScanButton, turbosortScanResultsList, '.turbosort');
+            if (!newConfigData.name || !newConfigData.hostId || !newConfigData.directoryPath) {
+                alert('Name, Host, and Directory Path are required for an automation configuration.');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/automation-configs', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(newConfigData)
+                });
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+                }
+                addAutomationConfigForm.reset(); // Clear the form
+                automationConfigHostSelect.value = currentHosts.length > 0 ? currentHosts[0].id : ''; // Reset dropdown
+                fetchAndRenderAutomationConfigs(); // Refresh the list
+            } catch (error) {
+                console.error('Error saving automation config:', error);
+                alert(`Error saving automation configuration: ${error.message}`);
+            }
         });
 
 
@@ -855,8 +925,9 @@
         // Initial load
         document.addEventListener('DOMContentLoaded', () => {
             initializeFlagButtons(); // For task form
-            fetchAndRenderHosts();   // Fetch hosts first to populate dropdowns
+            fetchAndRenderHosts();   // Fetch hosts first to populate dropdowns for all relevant forms
             fetchAndRenderTasks();   // Then fetch tasks
+            fetchAndRenderAutomationConfigs(); // Fetch automation configs
             
             // Set initial active tab (Tasks)
             setActiveTab('tasks');
