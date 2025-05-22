@@ -28,6 +28,9 @@ interface Task {
   flags: string[]; // Store flags as an array of strings
   scheduleEnabled: boolean;
   scheduleDetails?: string; // e.g., cron string or simple description
+  // Fields for linking to automation
+  automationConfigId?: string; // ID of the AutomationConfig that created this task
+  triggerFilePath?: string;    // The specific .livework or .turbosort file that triggered this task
   // Add other fields like lastRun, status, etc. later
 }
 
@@ -620,6 +623,9 @@ app.post('/api/tasks', async (req, res) => {
     flags,
     scheduleEnabled,
     scheduleDetails,
+    // New optional fields for automation linking
+    automationConfigId,
+    triggerFilePath,
   } = req.body;
 
   if (!name) {
@@ -647,6 +653,8 @@ app.post('/api/tasks', async (req, res) => {
     flags: flags || [],
     scheduleEnabled: !!scheduleEnabled,
     scheduleDetails: scheduleEnabled ? scheduleDetails : undefined,
+    automationConfigId: automationConfigId || undefined,
+    triggerFilePath: triggerFilePath || undefined,
   };
   tasks.push(newTask);
   await saveData();

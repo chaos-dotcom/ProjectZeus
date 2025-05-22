@@ -817,21 +817,83 @@
                                 destinationHostId: destHostId,
                                 destinationPath: finalDestinationPath,
                                 flags: ['-a', '-v', '--delete'], // Example default flags, no -z
+                                automationConfigId: config.id, // Link to the automation config
+                                triggerFilePath: triggerFile,    // Link to the specific trigger file
                                 // scheduleEnabled: false, // Typically run once
                             });
                         });
                     }
                     automationScanResultsDisplay.innerHTML += "</ul>";
 
+                    // --- Task Cleanup and Proposal Logic ---
+                    let allTasks = [];
+                    try {
+                        const tasksResponse = await fetch('/api/tasks');
+                        if (!tasksResponse.ok) throw new Error('Failed to fetch existing tasks for cleanup.');
+                        allTasks = await tasksResponse.json();
+                    } catch (e) {
+                        console.error("Error fetching tasks for cleanup/comparison:", e);
+                        automationScanResultsDisplay.innerHTML += `<p style="color:red;">Could not fetch existing tasks: ${e.message}</p>`;
+                    }
+
+                    const tasksForThisAutomation = allTasks.filter(task => task.automationConfigId === config.id);
+                    const currentTriggerFilePaths = triggerFiles.map(f => f); // Array of found trigger file paths
+
+                    let deletedTasksInfo = []; // To store info about deleted tasks
+
+                    for (const task of tasksForThisAutomation) {
+                        if (task.triggerFilePath && !currentTriggerFilePaths.includes(task.triggerFilePath)) {
+                            // This task's trigger file is gone, so delete the task
+                            try {
+                                const deleteResponse = await fetch(`/api/tasks/${task.id}`, { method: 'DELETE' });
+                                if (!deleteResponse.ok) {
+                                    let delErrorMsg = `Failed to delete task ${task.name} (ID: ${task.id}). Status: ${deleteResponse.status}`;
+                                    try { const errData = await deleteResponse.json(); delErrorMsg = errData.message || delErrorMsg; } catch(e){}
+                                    throw new Error(delErrorMsg);
+                                }
+                                deletedTasksInfo.push(`Deleted task: "${task.name}" (trigger file ${task.triggerFilePath} no longer found).`);
+                            } catch (e) {
+                                console.error(`Error deleting task ${task.id}:`, e);
+                                deletedTasksInfo.push(`<span style="color:red;">Error deleting task "${task.name}": ${e.message}</span>`);
+                            }
+                        }
+                    }
+
+                    if (deletedTasksInfo.length > 0) {
+                        automationScanResultsDisplay.innerHTML += "<h4>Task Cleanup:</h4><ul>" + deletedTasksInfo.map(info => `<li>${info}</li>`).join('') + "</ul>";
+                        fetchAndRenderTasks(); // Refresh the main tasks list UI if any were deleted
+                    }
+                    // --- End Task Cleanup ---
+
+                    // --- Propose New Jobs ---
+                    let newJobsToProposeDetails = [];
                     if (jobCreationDetails.length > 0) {
-                        automationScanResultsDisplay.innerHTML += "<h4>Proposed Rsync Jobs:</h4><ul>";
-                        jobCreationDetails.forEach(job => {
+                        jobCreationDetails.forEach(jobDetail => {
+                            const existingTask = tasksForThisAutomation.find(t => 
+                                t.triggerFilePath === jobDetail.triggerFilePath && 
+                                t.destinationHostId === jobDetail.destinationHostId &&
+                                t.paths[0]?.source === jobDetail.sourcePath && 
+                                t.paths[0]?.destination === jobDetail.destinationPath
+                            );
+                            // Only propose if it doesn't exist OR if its trigger file was just re-found (meaning it might have been deleted and should be re-added)
+                            // A simpler logic for now: only propose if no exact match is found.
+                            if (!existingTask) {
+                                newJobsToProposeDetails.push(jobDetail);
+                            }
+                        });
+                    }
+                    
+                    if (newJobsToProposeDetails.length > 0) {
+                        automationScanResultsDisplay.innerHTML += "<h4>Newly Proposed Rsync Jobs:</h4><ul>";
+                        newJobsToProposeDetails.forEach(job => {
                             automationScanResultsDisplay.innerHTML += `<li>Task: "${job.taskName}"<br>&nbsp;&nbsp;&nbsp;Source: ${currentHosts.find(h=>h.id === job.sourceHostId)?.alias}:${job.sourcePath}<br>&nbsp;&nbsp;&nbsp;Destination: ${currentHosts.find(h=>h.id === job.destinationHostId)?.alias}:${job.destinationPath}<br>&nbsp;&nbsp;&nbsp;Flags: ${job.flags.join(' ')}</li><br>`;
                         });
-                        automationScanResultsDisplay.innerHTML += "</ul><p style='color:blue;'>Next: Button to create these tasks.</p>";
-                        // TODO: Add a button "Create Tasks" that iterates jobCreationDetails and POSTs to /api/tasks
-                    } else {
-                        automationScanResultsDisplay.innerHTML += "<p>No jobs to propose based on scan results and configurations.</p>";
+                        automationScanResultsDisplay.innerHTML += "</ul><p style='color:blue;'>Next: Button to create these NEWLY proposed tasks.</p>";
+                        // TODO: Add a button "Create Tasks" that iterates newJobsToProposeDetails and POSTs to /api/tasks
+                    } else if (triggerFiles.length > 0 && deletedTasksInfo.length === 0) {
+                         automationScanResultsDisplay.innerHTML += "<p>All found trigger files appear to have corresponding tasks already. No new jobs to propose.</p>";
+                    } else if (triggerFiles.length === 0 && deletedTasksInfo.length === 0) {
+                         // This case is already handled by "No .${config.type} trigger files found..."
                     }
                 }
             } catch (error) {

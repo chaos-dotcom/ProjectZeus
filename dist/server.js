@@ -491,7 +491,9 @@ app.get('/api/tasks', (req, res) => {
 });
 // POST a new task
 app.post('/api/tasks', async (req, res) => {
-    const { name, sourceHost, destinationHost, paths, flags, scheduleEnabled, scheduleDetails, } = req.body;
+    const { name, sourceHost, destinationHost, paths, flags, scheduleEnabled, scheduleDetails, 
+    // New optional fields for automation linking
+    automationConfigId, triggerFilePath, } = req.body;
     if (!name) {
         return res.status(400).json({ message: 'Task name is required' });
     }
@@ -516,6 +518,8 @@ app.post('/api/tasks', async (req, res) => {
         flags: flags || [],
         scheduleEnabled: !!scheduleEnabled,
         scheduleDetails: scheduleEnabled ? scheduleDetails : undefined,
+        automationConfigId: automationConfigId || undefined,
+        triggerFilePath: triggerFilePath || undefined,
     };
     tasks.push(newTask);
     await saveData();
