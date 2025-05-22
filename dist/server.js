@@ -252,6 +252,42 @@ app.post('/api/automation-configs', async (req, res) => {
     await saveData();
     res.status(201).json(newConfig);
 });
+app.put('/api/automation-configs/:id', async (req, res) => {
+    const { id } = req.params;
+    const { name, type, scanHostId, scanDirectoryPath, destinationHostIds, destinationBasePath } = req.body;
+    if (!name || !type || !scanHostId || !scanDirectoryPath || !destinationHostIds || !destinationBasePath) {
+        return res.status(400).json({ message: 'Name, type, scanHostId, scanDirectoryPath, destinationHostIds, and destinationBasePath are required.' });
+    }
+    if (type !== 'livework' && type !== 'turbosort') {
+        return res.status(400).json({ message: 'Invalid type. Must be "livework" or "turbosort".' });
+    }
+    if (!hosts.find(h => h.id === scanHostId)) {
+        return res.status(400).json({ message: 'scanHostId does not refer to a valid host.' });
+    }
+    if (!Array.isArray(destinationHostIds) || destinationHostIds.length === 0) {
+        return res.status(400).json({ message: 'destinationHostIds must be a non-empty array.' });
+    }
+    for (const destHostId of destinationHostIds) {
+        if (!hosts.find(h => h.id === destHostId)) {
+            return res.status(400).json({ message: `Invalid hostId "${destHostId}" in destinationHostIds.` });
+        }
+    }
+    const configIndex = automationConfigs.findIndex(ac => ac.id === id);
+    if (configIndex === -1) {
+        return res.status(404).json({ message: 'Automation configuration not found.' });
+    }
+    automationConfigs[configIndex] = {
+        ...automationConfigs[configIndex],
+        name,
+        type,
+        scanHostId,
+        scanDirectoryPath,
+        destinationHostIds,
+        destinationBasePath,
+    };
+    await saveData();
+    res.json(automationConfigs[configIndex]);
+});
 app.delete('/api/automation-configs/:id', async (req, res) => {
     const { id } = req.params;
     const configIndex = automationConfigs.findIndex(ac => ac.id === id);

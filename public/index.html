@@ -167,7 +167,7 @@
         <h2>Automation Configurations</h2>
 
         <div class="host-form-container"> <!-- Reusing some styles for the form -->
-            <h3>Add New Automation Configuration</h3>
+            <h3 id="automationConfigFormTitle">Add New Automation Configuration</h3>
             <form id="addAutomationConfigForm">
                 <div class="form-group">
                     <label for="automationConfigNameInput">Name:</label>
@@ -198,7 +198,8 @@
                     <input type="text" id="automationConfigDestBasePathInput" placeholder="/path/on/destination/hosts" required style="flex-grow:2;">
                 </div>
                 <div style="text-align: right;">
-                    <button type="submit" class="btn btn-primary">Save Configuration</button>
+                    <button type="submit" id="saveAutomationConfigButton" class="btn btn-primary">Save Configuration</button>
+                    <button type="button" id="cancelEditAutomationConfigButton" class="btn" style="display:none; background-color: #6c757d; color:white;">Cancel Edit</button>
                 </div>
             </form>
         </div>
@@ -331,14 +332,19 @@
 
         // Automation Elements
         const addAutomationConfigForm = document.getElementById('addAutomationConfigForm');
+        const automationConfigFormTitle = document.getElementById('automationConfigFormTitle');
         const automationConfigNameInput = document.getElementById('automationConfigNameInput');
         const automationConfigTypeSelect = document.getElementById('automationConfigTypeSelect');
         const automationConfigScanHostSelect = document.getElementById('automationConfigScanHostSelect');
         const automationConfigScanPathInput = document.getElementById('automationConfigScanPathInput');
         const automationConfigDestHostsSelect = document.getElementById('automationConfigDestHostsSelect');
         const automationConfigDestBasePathInput = document.getElementById('automationConfigDestBasePathInput');
+        const saveAutomationConfigButton = document.getElementById('saveAutomationConfigButton');
+        const cancelEditAutomationConfigButton = document.getElementById('cancelEditAutomationConfigButton');
         const automationConfigsListElement = document.getElementById('automationConfigsList');
         const automationScanResultsDisplay = document.getElementById('automationScanResultsDisplay');
+
+        let editingAutomationConfigId = null;
 
 
         // Tab Navigation Elements
@@ -672,10 +678,15 @@
                         <p>Destination Base Path: ${config.destinationBasePath}</p>
                     </div>
                     <div class="actions">
+                        <button class="btn btn-sm btn-warning edit-config-btn" data-config-id="${config.id}" style="margin-right:5px; background-color: #ffc107; color: #212529;">Edit</button>
                         <button class="btn btn-success scan-now-btn" data-config-id="${config.id}">Scan for Files</button>
                         <button class="btn btn-danger delete-config-btn" data-config-id="${config.id}">Delete</button>
                     </div>
                 `;
+
+                itemDiv.querySelector('.edit-config-btn').addEventListener('click', () => {
+                    loadAutomationConfigIntoForm(config);
+                });
 
                 itemDiv.querySelector('.scan-now-btn').addEventListener('click', async () => {
                     await executeAutomationScan(config);
@@ -817,6 +828,39 @@
                 }
             }
         }
+
+        function resetAutomationConfigForm() {
+            addAutomationConfigForm.reset();
+            editingAutomationConfigId = null;
+            automationConfigFormTitle.textContent = 'Add New Automation Configuration';
+            saveAutomationConfigButton.textContent = 'Save Configuration';
+            cancelEditAutomationConfigButton.style.display = 'none';
+            // Reset multi-select for destination hosts
+            Array.from(automationConfigDestHostsSelect.options).forEach(option => option.selected = false);
+            // Reset scan host dropdown to first available host or empty if none
+            automationConfigScanHostSelect.value = currentHosts.length > 0 ? currentHosts[0].id : '';
+        }
+
+        cancelEditAutomationConfigButton.addEventListener('click', resetAutomationConfigForm);
+
+        function loadAutomationConfigIntoForm(config) {
+            editingAutomationConfigId = config.id;
+            automationConfigFormTitle.textContent = 'Edit Automation Configuration';
+            saveAutomationConfigButton.textContent = 'Save Changes';
+            cancelEditAutomationConfigButton.style.display = 'inline-block';
+
+            automationConfigNameInput.value = config.name;
+            automationConfigTypeSelect.value = config.type;
+            automationConfigScanHostSelect.value = config.scanHostId;
+            automationConfigScanPathInput.value = config.scanDirectoryPath;
+            automationConfigDestBasePathInput.value = config.destinationBasePath;
+
+            // Set selected options for multi-select destination hosts
+            Array.from(automationConfigDestHostsSelect.options).forEach(option => {
+                option.selected = config.destinationHostIds.includes(option.value);
+            });
+        }
+
 
         addAutomationConfigForm.addEventListener('submit', async (event) => {
             event.preventDefault();
