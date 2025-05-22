@@ -720,31 +720,92 @@
                     throw new Error(errorMessage);
                 }
 
+                    throw new Error(errorMessage);
+                }
+
                 let allFoundFiles = await scanResponse.json();
-                // Filter for the specific type of trigger file for this automation config
                 const triggerFiles = allFoundFiles.filter(file => file.endsWith(`.${config.type}`));
 
                 if (triggerFiles.length === 0) {
                     automationScanResultsDisplay.innerHTML = `<p>No .${config.type} trigger files found for configuration "${config.name}".</p>`;
                 } else {
-                    automationScanResultsDisplay.innerHTML = `<strong>Found trigger files for "${config.name}":</strong>`;
-                    const ul = document.createElement('ul');
-                    triggerFiles.forEach(triggerFile => {
-                        const li = document.createElement('li');
-                        li.textContent = triggerFile;
-                        ul.appendChild(li);
-                        // TODO: Implement actual job creation here
-                        // For each triggerFile, determine its parent directory (project folder)
-                        // For each destinationHostId in config.destinationHostIds:
-                        //   Create an rsync task:
-                        //   Source: config.scanHostId, parentDirOf(triggerFile)
-                        //   Destination: destinationHostId, config.destinationBasePath + baseNameOf(parentDirOf(triggerFile))
-                        //   Flags: from a template or default
-                        //   Name: e.g., "Auto: " + config.name + " - " + baseNameOf(parentDirOf(triggerFile)) + " to " + destHostAlias
-                        //   (Consider "one and done" logic here or later)
-                    });
-                    automationScanResultsDisplay.appendChild(ul);
-                    automationScanResultsDisplay.innerHTML += "<p style='color:blue;'>Automatic job creation based on these files is the next step.</p>";
+                    automationScanResultsDisplay.innerHTML = `<strong>Found trigger files for "${config.name}":</strong><ul>`;
+                    
+                    let jobCreationDetails = []; // To store details for tasks to be created
+
+                    for (const triggerFile of triggerFiles) {
+                        automationScanResultsDisplay.innerHTML += `<li>${triggerFile}</li>`;
+                        
+                        // Determine project folder (parent directory of the trigger file)
+                        // Basic path manipulation, assumes Unix-like paths.
+                        // More robust path parsing might be needed for Windows paths if scanHost can be Windows.
+                        const parentDir = triggerFile.substring(0, triggerFile.lastIndexOf('/'));
+                        const projectFolderName = parentDir.substring(parentDir.lastIndexOf('/') + 1);
+
+                        let specificDestSubDir = "";
+                        if (config.type === 'turbosort') {
+                            try {
+                                const fileContentResponse = await fetch(`/api/hosts/${config.scanHostId}/read-file`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ filePath: triggerFile })
+                                });
+                                if (!fileContentResponse.ok) {
+                                    const errText = await fileContentResponse.text();
+                                    throw new Error(`Failed to read .turbosort file ${triggerFile}: ${errText}`);
+                                }
+                                specificDestSubDir = (await fileContentResponse.text()).trim();
+                                if (!specificDestSubDir) {
+                                    console.warn(`Warning: .turbosort file ${triggerFile} is empty or contains only whitespace.`);
+                                    automationScanResultsDisplay.innerHTML += `<li style="color:orange;">&nbsp;&nbsp;&nbsp;Warning: .turbosort file ${triggerFile} is empty. Skipping for specific subdir.</li>`;
+                                    // Decide if you want to skip or use a default for empty .turbosort files
+                                } else {
+                                     automationScanResultsDisplay.innerHTML += `<li style="color:green;">&nbsp;&nbsp;&nbsp;Destination sub-folder from file: ${specificDestSubDir}</li>`;
+                                }
+                            } catch (e) {
+                                console.error(`Error processing .turbosort file ${triggerFile}:`, e);
+                                automationScanResultsDisplay.innerHTML += `<li style="color:red;">&nbsp;&nbsp;&nbsp;Error reading ${triggerFile}: ${e.message}</li>`;
+                                continue; // Skip this trigger file if we can't read its content
+                            }
+                        }
+
+                        config.destinationHostIds.forEach(destHostId => {
+                            const destHost = currentHosts.find(h => h.id === destHostId);
+                            const destHostAlias = destHost ? destHost.alias : 'Unknown Dest Host';
+                            
+                            let finalDestinationPath = config.destinationBasePath;
+                            if (config.type === 'turbosort' && specificDestSubDir) {
+                                finalDestinationPath = `${config.destinationBasePath}/${specificDestSubDir}/${projectFolderName}`;
+                            } else { // For .livework or .turbosort without specific subdir (e.g. empty file)
+                                finalDestinationPath = `${config.destinationBasePath}/${projectFolderName}`;
+                            }
+                            // Normalize path (remove double slashes if any)
+                            finalDestinationPath = finalDestinationPath.replace(/\/\//g, '/');
+
+
+                            jobCreationDetails.push({
+                                taskName: `Auto: ${config.name} - ${projectFolderName} to ${destHostAlias}`,
+                                sourceHostId: config.scanHostId,
+                                sourcePath: parentDir, // The whole project folder
+                                destinationHostId: destHostId,
+                                destinationPath: finalDestinationPath,
+                                flags: ['-a', '-v', '--delete'], // Example default flags, no -z
+                                // scheduleEnabled: false, // Typically run once
+                            });
+                        });
+                    }
+                    automationScanResultsDisplay.innerHTML += "</ul>";
+
+                    if (jobCreationDetails.length > 0) {
+                        automationScanResultsDisplay.innerHTML += "<h4>Proposed Rsync Jobs:</h4><ul>";
+                        jobCreationDetails.forEach(job => {
+                            automationScanResultsDisplay.innerHTML += `<li>Task: "${job.taskName}"<br>&nbsp;&nbsp;&nbsp;Source: ${currentHosts.find(h=>h.id === job.sourceHostId)?.alias}:${job.sourcePath}<br>&nbsp;&nbsp;&nbsp;Destination: ${currentHosts.find(h=>h.id === job.destinationHostId)?.alias}:${job.destinationPath}<br>&nbsp;&nbsp;&nbsp;Flags: ${job.flags.join(' ')}</li><br>`;
+                        });
+                        automationScanResultsDisplay.innerHTML += "</ul><p style='color:blue;'>Next: Button to create these tasks.</p>";
+                        // TODO: Add a button "Create Tasks" that iterates jobCreationDetails and POSTs to /api/tasks
+                    } else {
+                        automationScanResultsDisplay.innerHTML += "<p>No jobs to propose based on scan results and configurations.</p>";
+                    }
                 }
             } catch (error) {
                 console.error('Error executing automation scan:', error);
