@@ -563,7 +563,7 @@ async function executeRsyncCommand(task, pathPair, hostsList) {
     else if (sourceHostObj.id !== 'localhost' && sourceHostObj.port) {
         sshPortForRsync = sourceHostObj.port;
     }
-    const rsyncSshCommand = `ssh -i "${privateKeyPath}" ${sshPortForRsync ? `-p ${sshPortForRsync}` : ''} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null`;
+    const rsyncSshCommand = `ssh -i "${privateKeyPath}" ${sshPortForRsync ? `-p ${sshPortForRsync}` : ''} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes`;
     const flagsString = task.flags.join(' ');
     let rsyncCommand;
     if (sourceHostObj.id !== 'localhost' && destinationHostObj.id !== 'localhost') {
@@ -571,11 +571,11 @@ async function executeRsyncCommand(task, pathPair, hostsList) {
         // This assumes sourceHostObj can SSH to destinationHostObj using its own keys (e.g., websync_id_rsa if copied there, or agent forwarding)
         // For simplicity, we'll assume websync_id_rsa is on sourceHostObj and authorized on destinationHostObj.
         // The 'rsyncSshCommand' here is for the *inner* rsync from RHA to RHB.
-        const innerRsyncSshCommand = `ssh -i "${privateKeyPath}" ${destinationHostObj.port ? `-p ${destinationHostObj.port}` : ''} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null`;
+        const innerRsyncSshCommand = `ssh -i "${privateKeyPath}" ${destinationHostObj.port ? `-p ${destinationHostObj.port}` : ''} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes`;
         const remoteRsyncCommand = `rsync ${flagsString} -e \\"${innerRsyncSshCommand}\\" "${pathPair.source}" "${destinationHostObj.user}@${destinationHostObj.hostname}:${pathPair.destination}"`;
         // The outer SSH command to connect to sourceHostObj (RHA)
         const outerSshPortOption = sourceHostObj.port ? `-p ${sourceHostObj.port}` : '';
-        rsyncCommand = `ssh -i "${privateKeyPath}" ${outerSshPortOption} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${sourceHostObj.user}@${sourceHostObj.hostname} "${remoteRsyncCommand.replace(/"/g, '\\"')}"`;
+        rsyncCommand = `ssh -i "${privateKeyPath}" ${outerSshPortOption} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes ${sourceHostObj.user}@${sourceHostObj.hostname} "${remoteRsyncCommand.replace(/"/g, '\\"')}"`;
         console.log(`Executing remote-to-remote rsync (via ${sourceHostObj.alias}): ${rsyncCommand.split(' ')[0]} ... details in task log`);
     }
     else if (sourceHostObj.id !== 'localhost' || destinationHostObj.id !== 'localhost') {
