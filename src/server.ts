@@ -33,12 +33,26 @@ interface Task {
 
 let tasks: Task[] = []; // Will be populated by loadData
 
+// --- Automation Configuration ---
+interface AutomationConfig {
+  id: string;
+  name: string;
+  type: 'livework' | 'turbosort';
+  hostId: string;
+  directoryPath: string;
+  // lastScanned?: string; // Optional: for future use
+  // templateTaskId?: string; // Optional: for job creation from template
+}
+
+let automationConfigs: AutomationConfig[] = []; // Will be populated by loadData
+
+
 // --- Data Persistence ---
 const DATA_FILE_PATH = path.join(__dirname, '..', 'websync-data.json');
 
 async function saveData(): Promise<void> {
   try {
-    const dataToSave = { hosts, tasks };
+    const dataToSave = { hosts, tasks, automationConfigs };
     await fs.promises.writeFile(DATA_FILE_PATH, JSON.stringify(dataToSave, null, 2), 'utf-8');
     // console.log('Data saved to file.'); // Optional: for debugging
   } catch (error) {
@@ -49,6 +63,7 @@ async function saveData(): Promise<void> {
 async function loadData(): Promise<void> {
   let loadedHosts: Host[] = [];
   let loadedTasks: Task[] = [];
+  let loadedAutomationConfigs: AutomationConfig[] = [];
 
   try {
     if (fs.existsSync(DATA_FILE_PATH)) {
@@ -56,6 +71,7 @@ async function loadData(): Promise<void> {
       const parsedData = JSON.parse(fileContent);
       loadedHosts = parsedData.hosts || [];
       loadedTasks = parsedData.tasks || [];
+      loadedAutomationConfigs = parsedData.automationConfigs || [];
     }
   } catch (error) {
     console.error('Error reading or parsing data file. Initializing with empty/default data.', error);
@@ -72,9 +88,12 @@ async function loadData(): Promise<void> {
   // Filter out any existing localhost entries from loadedHosts to avoid duplicates, then prepend our controlled one.
   hosts = [localhostEntry, ...loadedHosts.filter(h => h.id !== 'localhost')];
   tasks = loadedTasks;
+  automationConfigs = loadedAutomationConfigs;
 
-  // If the file didn't exist initially or was unparsable and resulted in empty hosts (except our default), save initial state.
-  if (!fs.existsSync(DATA_FILE_PATH) || (loadedHosts.length === 0 && !localhostFromFile)) {
+  // If the file didn't exist initially or was unparsable and resulted in empty data structures, save initial state.
+  if (!fs.existsSync(DATA_FILE_PATH) || 
+      ((loadedHosts.length === 0 && !localhostFromFile) && loadedTasks.length === 0 && loadedAutomationConfigs.length === 0)
+     ) {
     await saveData(); 
   }
 }
@@ -250,6 +269,49 @@ app.post('/api/hosts/:hostId/list-directory-contents', async (req, res) => {
     console.error(`Error in list-directory-contents endpoint for host ${hostId}, path ${directoryPath}:`, error);
     res.status(500).json({ message: error.message || 'An unexpected error occurred during directory listing.' });
   }
+});
+
+// --- Automation Config API Endpoints ---
+app.get('/api/automation-configs', (req, res) => {
+  res.json(automationConfigs);
+});
+
+app.post('/api/automation-configs', async (req, res) => {
+  const { name, type, hostId, directoryPath } = req.body;
+
+  if (!name || !type || !hostId || !directoryPath) {
+    return res.status(400).json({ message: 'Name, type, hostId, and directoryPath are required.' });
+  }
+  if (type !== 'livework' && type !== 'turbosort') {
+    return res.status(400).json({ message: 'Invalid type. Must be "livework" or "turbosort".' });
+  }
+  if (!hosts.find(h => h.id === hostId)) {
+    return res.status(400).json({ message: 'HostId does not refer to a valid host.' });
+  }
+
+  const newConfig: AutomationConfig = {
+    id: Date.now().toString(),
+    name,
+    type,
+    hostId,
+    directoryPath,
+  };
+  automationConfigs.push(newConfig);
+  await saveData();
+  res.status(201).json(newConfig);
+});
+
+app.delete('/api/automation-configs/:id', async (req, res) => {
+  const { id } = req.params;
+  const configIndex = automationConfigs.findIndex(ac => ac.id === id);
+
+  if (configIndex === -1) {
+    return res.status(404).json({ message: 'Automation configuration not found.' });
+  }
+
+  automationConfigs.splice(configIndex, 1);
+  await saveData();
+  res.status(204).send();
 });
 
 
