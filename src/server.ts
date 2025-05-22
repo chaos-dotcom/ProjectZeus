@@ -151,6 +151,88 @@ app.post('/api/hosts/:hostId/scan-directory', async (req, res) => {
   }
 });
 
+// --- Directory Listing Functionality ---
+interface DirectoryEntry {
+  name: string;
+  type: 'file' | 'directory' | 'other';
+  path: string; // Full path to the entry
+}
+
+async function listDirectoryContents(host: Host, directoryPath: string): Promise<DirectoryEntry[]> {
+  const privateKeyPath = path.join(os.homedir(), '.ssh', 'websync_id_rsa');
+  // No need to check for key existence here again, as scanDirectoryOnHost and ssh-copy-id handle it.
+  // Assume if we reach here for a remote host, key setup is expected.
+
+  if (host.id === 'localhost') {
+    try {
+      const entries = await fs.promises.readdir(directoryPath, { withFileTypes: true });
+      return entries.map(entry => {
+        let type: DirectoryEntry['type'] = 'other';
+        if (entry.isFile()) type = 'file';
+        else if (entry.isDirectory()) type = 'directory';
+        return { name: entry.name, type, path: path.join(directoryPath, entry.name) };
+      });
+    } catch (error: any) {
+      console.error(`Error listing local directory ${directoryPath}:`, error);
+      throw new Error(`Failed to list local directory ${directoryPath}: ${error.message}`);
+    }
+  } else {
+    // Remote host: Use SSH to execute 'ls -Ap1 -- "<directoryPath>"'
+    // The '--' ensures that if directoryPath starts with a '-', it's not treated as an option.
+    const escapedDirectoryPath = directoryPath.replace(/'/g, "'\\''"); // Basic escaping for single quotes
+    const listCommand = `ls -Ap1 -- '${escapedDirectoryPath}'`;
+    const portOption = host.port ? `-p ${host.port}` : '';
+    const sshCommand = `ssh -i "${privateKeyPath}" -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${portOption} ${host.user}@${host.hostname} "${listCommand}"`;
+
+    console.log(`Executing remote directory list: ${sshCommand.split(' ')[0]} ...`); // Log only ssh part for brevity
+
+    return new Promise<DirectoryEntry[]>((resolve, reject) => {
+      exec(sshCommand, (error, stdout, stderr) => {
+        if (error) {
+          console.error(`Remote directory list exec error for ${host.alias} on path ${directoryPath}: ${stderr || error.message}`);
+          return reject(new Error(`Failed to list directory on ${host.alias}. SSH command failed. ${stderr || error.message}`));
+        }
+        const lines = stdout.trim().split('\n').filter(line => line.length > 0);
+        const directoryEntries: DirectoryEntry[] = lines.map(line => {
+          const isDir = line.endsWith('/');
+          const name = isDir ? line.slice(0, -1) : line;
+          // Construct full path. Note: path.join might not be correct for remote paths if they use different separators.
+          // For simplicity, assuming Unix-like remote paths.
+          const entryPath = (directoryPath.endsWith('/') ? directoryPath : directoryPath + '/') + name;
+          return {
+            name,
+            type: isDir ? 'directory' : 'file', // ls -p appends / to dirs
+            path: entryPath
+          };
+        });
+        resolve(directoryEntries);
+      });
+    });
+  }
+}
+
+app.post('/api/hosts/:hostId/list-directory-contents', async (req, res) => {
+  const { hostId } = req.params;
+  const { directoryPath } = req.body;
+
+  if (!directoryPath) {
+    return res.status(400).json({ message: 'directoryPath is required in the request body.' });
+  }
+
+  const host = hosts.find(h => h.id === hostId);
+  if (!host) {
+    return res.status(404).json({ message: 'Host not found.' });
+  }
+
+  try {
+    const entries = await listDirectoryContents(host, directoryPath);
+    res.json(entries);
+  } catch (error: any) {
+    console.error(`Error in list-directory-contents endpoint for host ${hostId}, path ${directoryPath}:`, error);
+    res.status(500).json({ message: error.message || 'An unexpected error occurred during directory listing.' });
+  }
+});
+
 
 // --- Host Management ---
 interface Host {
