@@ -357,6 +357,7 @@
         const automationScanResultsDisplay = document.getElementById('automationScanResultsDisplay');
 
         let editingAutomationConfigId = null;
+        let currentProposedJobs = []; // To store details for tasks to be created by the button
 
 
         // Tab Navigation Elements
@@ -888,11 +889,22 @@
                         newJobsToProposeDetails.forEach(job => {
                             automationScanResultsDisplay.innerHTML += `<li>Task: "${job.taskName}"<br>&nbsp;&nbsp;&nbsp;Source: ${currentHosts.find(h=>h.id === job.sourceHostId)?.alias}:${job.sourcePath}<br>&nbsp;&nbsp;&nbsp;Destination: ${currentHosts.find(h=>h.id === job.destinationHostId)?.alias}:${job.destinationPath}<br>&nbsp;&nbsp;&nbsp;Flags: ${job.flags.join(' ')}</li><br>`;
                         });
-                        automationScanResultsDisplay.innerHTML += "</ul><p style='color:blue;'>Next: Button to create these NEWLY proposed tasks.</p>";
-                        // TODO: Add a button "Create Tasks" that iterates newJobsToProposeDetails and POSTs to /api/tasks
+                        automationScanResultsDisplay.innerHTML += "</ul>";
+                        
+                        currentProposedJobs = newJobsToProposeDetails; // Store for the button
+                        const createTasksButton = document.createElement('button');
+                        createTasksButton.id = 'createProposedTasksButton';
+                        createTasksButton.className = 'btn btn-primary';
+                        createTasksButton.textContent = 'Create Proposed Tasks';
+                        createTasksButton.style.marginTop = '10px';
+                        createTasksButton.addEventListener('click', handleCreateProposedTasks);
+                        automationScanResultsDisplay.appendChild(createTasksButton);
+
                     } else if (triggerFiles.length > 0 && deletedTasksInfo.length === 0) {
                          automationScanResultsDisplay.innerHTML += "<p>All found trigger files appear to have corresponding tasks already. No new jobs to propose.</p>";
+                         currentProposedJobs = []; // Clear any previous proposals
                     } else if (triggerFiles.length === 0 && deletedTasksInfo.length === 0) {
+                         currentProposedJobs = []; // Clear any previous proposals
                          // This case is already handled by "No .${config.type} trigger files found..."
                     }
                 }
@@ -906,6 +918,66 @@
                 }
             }
         }
+
+        async function handleCreateProposedTasks() {
+            const button = document.getElementById('createProposedTasksButton');
+            if (!button) return;
+
+            button.textContent = 'Creating Tasks...';
+            button.disabled = true;
+            let createdCount = 0;
+            let failedCount = 0;
+            let resultsHTML = "<h4>Task Creation Results:</h4><ul>";
+
+            for (const jobDetail of currentProposedJobs) {
+                const taskPayload = {
+                    name: jobDetail.taskName,
+                    sourceHost: jobDetail.sourceHostId,
+                    destinationHost: jobDetail.destinationHostId,
+                    paths: [{ source: jobDetail.sourcePath, destination: jobDetail.destinationPath }],
+                    flags: jobDetail.flags,
+                    scheduleEnabled: false, // Default for auto-created tasks, can be changed later
+                    automationConfigId: jobDetail.automationConfigId,
+                    triggerFilePath: jobDetail.triggerFilePath
+                };
+
+                try {
+                    const response = await fetch('/api/tasks', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(taskPayload)
+                    });
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.message || `HTTP ${response.status}`);
+                    }
+                    resultsHTML += `<li style="color:green;">Successfully created task: "${jobDetail.taskName}"</li>`;
+                    createdCount++;
+                } catch (error) {
+                    resultsHTML += `<li style="color:red;">Failed to create task "${jobDetail.taskName}": ${error.message}</li>`;
+                    failedCount++;
+                    console.error(`Error creating task ${jobDetail.taskName}:`, error);
+                }
+            }
+            resultsHTML += "</ul>";
+            if (createdCount > 0) {
+                resultsHTML += `<p>${createdCount} task(s) created successfully.</p>`;
+                fetchAndRenderTasks(); // Refresh the main task list
+            }
+            if (failedCount > 0) {
+                resultsHTML += `<p style="color:red;">${failedCount} task(s) failed to create.</p>`;
+            }
+            
+            // Update the scan results display area, perhaps above or replacing the button
+            // For simplicity, let's just add to it for now, and remove the button.
+            const existingResults = automationScanResultsDisplay.innerHTML;
+            automationScanResultsDisplay.innerHTML = existingResults.replace(/<button id="createProposedTasksButton".*?<\/button>/s, ''); // Remove button
+            automationScanResultsDisplay.innerHTML += resultsHTML;
+
+
+            currentProposedJobs = []; // Clear proposals after attempting creation
+        }
+
 
         function resetAutomationConfigForm() {
             addAutomationConfigForm.reset();
