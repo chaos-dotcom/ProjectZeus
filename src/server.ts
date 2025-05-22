@@ -923,15 +923,40 @@ async function executeRsyncCommand(task: Task, pathPair: PathPair, hostsList: Ho
                 // Parse rsync output to extract transferred file paths
                 // rsync output format varies based on flags, but we can look for common patterns
                 const lines = stdout.split('\n');
-                for (const line of lines) {
-                  // Skip empty lines and summary lines
-                  if (!line.trim() || line.includes('sent ') || line.includes('total size')) continue;
+                
+                // Check if we have a "building file list" format (common in remote-to-remote transfers)
+                const isBuildingFileListFormat = stdout.includes('building file list');
+                
+                if (isBuildingFileListFormat) {
+                  // For remote-to-remote transfers, we need to handle differently
+                  // In this case, we'll use the source path as the base for our exclude entries
+                  // This is because the actual files transferred aren't listed in detail
                   
-                  // Extract the file path - this may need adjustment based on your rsync flags
-                  // This assumes default output format or -v flag
-                  const match = line.trim().match(/^[<>ch.+*] (.+)$/);
-                  if (match && match[1]) {
-                    transferredFiles.push(match[1]);
+                  // Check if any files were actually transferred (look for speedup value)
+                  const speedupMatch = stdout.match(/speedup is ([0-9.]+)/);
+                  if (speedupMatch && parseFloat(speedupMatch[1]) > 1) {
+                    // Files were transferred, so add the source path
+                    transferredFiles.push(pathPair.source);
+                    console.log(`[Rsync Exec] Detected remote-to-remote transfer with files transferred. Using source path: ${pathPair.source}`);
+                  }
+                } else {
+                  // Standard verbose output format
+                  for (const line of lines) {
+                    // Skip empty lines and summary lines
+                    if (!line.trim() || line.includes('sent ') || line.includes('total size')) continue;
+                    
+                    // Extract the file path - try multiple patterns to match different rsync output formats
+                    const verboseMatch = line.trim().match(/^[<>ch.+*] (.+)$/);
+                    const simpleMatch = line.trim().match(/^(.+)$/);
+                    
+                    if (verboseMatch && verboseMatch[1]) {
+                      transferredFiles.push(verboseMatch[1]);
+                    } else if (simpleMatch && simpleMatch[1] && 
+                              !simpleMatch[1].startsWith('building') && 
+                              !simpleMatch[1].startsWith('sent') && 
+                              !simpleMatch[1].startsWith('total')) {
+                      transferredFiles.push(simpleMatch[1]);
+                    }
                   }
                 }
                 
@@ -939,6 +964,14 @@ async function executeRsyncCommand(task: Task, pathPair: PathPair, hostsList: Ho
                 if (transferredFiles.length === 0) {
                   console.log(`[Rsync Exec] Warning: Could not parse transferred files from rsync output for task ${task.name}`);
                   console.log(`[Rsync Exec] Rsync stdout: ${stdout}`);
+                  
+                  // For remote-to-remote transfers that don't show detailed file lists,
+                  // check if any data was transferred at all based on the summary
+                  if (stdout.includes('total size is') && !stdout.includes('speedup is 0.00')) {
+                    // Some data was transferred, so use the source path as a fallback
+                    transferredFiles.push(pathPair.source);
+                    console.log(`[Rsync Exec] Using source path as fallback: ${pathPair.source}`);
+                  }
                 }
                 
                 // Construct the exclude file path on the source host
@@ -947,16 +980,25 @@ async function executeRsyncCommand(task: Task, pathPair: PathPair, hostsList: Ho
                 // Create a command to append each transferred file to the exclude file
                 let appendEntries = '';
                 for (const file of transferredFiles) {
-                  // Get the relative path from the source directory
-                  let relativePath = file;
-                  if (file.startsWith(pathPair.source)) {
-                    relativePath = file.substring(pathPair.source.length);
+                  // Handle the case where we're using the entire source path
+                  // (which happens in remote-to-remote transfers)
+                  if (file === pathPair.source) {
+                    // Extract just the last part of the path (the project folder name)
+                    const projectFolderName = path.basename(file.endsWith('/') ? file.slice(0, -1) : file);
+                    appendEntries += `${projectFolderName}/\n`; // Add trailing slash to indicate directory
+                    console.log(`[Rsync Exec] Adding project folder to exclude list: ${projectFolderName}/`);
+                  } else {
+                    // Normal case - get the relative path from the source directory
+                    let relativePath = file;
+                    if (file.startsWith(pathPair.source)) {
+                      relativePath = file.substring(pathPair.source.length);
+                    }
+                    // Skip empty paths
+                    if (!relativePath.trim()) continue;
+                    
+                    // Add the file to our append string
+                    appendEntries += `${relativePath}\n`;
                   }
-                  // Skip empty paths
-                  if (!relativePath.trim()) continue;
-                  
-                  // Add the file to our append string
-                  appendEntries += `${relativePath}\n`;
                 }
                 
                 // If we have files to append, create the command
