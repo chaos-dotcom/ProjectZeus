@@ -869,11 +869,11 @@ async function executeRsyncCommand(task: Task, pathPair: PathPair, hostsList: Ho
       }
       // --- End ensure exclude file exists ---
 
-      // Add the exclude-from flag and also add verbose output so we can parse transferred files
+      // Add the exclude-from flag and itemize-changes flag for reliable output parsing
       finalFlags.push(`--exclude-from='${excludeFilePathOnSource.replace(/'/g, "'\\''")}'`);
-      // Add verbose flag if not already present to help with parsing output
-      if (!finalFlags.includes('-v') && !finalFlags.includes('--verbose')) {
-        finalFlags.push('-v');
+      // Add itemize-changes flag if not already present - this provides structured output of changed files
+      if (!finalFlags.includes('--itemize-changes')) {
+        finalFlags.push('--itemize-changes');
       }
       console.log(`[Rsync Exec] ADDED --exclude-from='${excludeFilePathOnSource}' to flags for task ${task.id}`); // DEBUG
     } else {
@@ -931,42 +931,30 @@ async function executeRsyncCommand(task: Task, pathPair: PathPair, hostsList: Ho
                 // We'll parse the stdout to get the list of files
                 const transferredFiles: string[] = [];
                 
-                // Parse rsync output to extract transferred file paths
-                // rsync output format varies based on flags, but we can look for common patterns
+                // Parse rsync output to extract transferred files using the itemize-changes format
+                // Format is: YXcstpoguax PATH
+                // Where the first 11 characters are flags and the rest is the path
                 const lines = stdout.split('\n');
                 
-                // Check if we have a "building file list" format (common in remote-to-remote transfers)
-                const isBuildingFileListFormat = stdout.includes('building file list');
-                
-                if (isBuildingFileListFormat) {
-                  // For remote-to-remote transfers, we need to handle differently
-                  // In this case, we'll use the source path as the base for our exclude entries
-                  // This is because the actual files transferred aren't listed in detail
+                for (const line of lines) {
+                  // Skip empty lines and summary lines
+                  if (!line.trim() || line.includes('sent ') || line.includes('total size')) continue;
                   
-                  // Check if any files were actually transferred (look for speedup value)
-                  const speedupMatch = stdout.match(/speedup is ([0-9.]+)/);
-                  if (speedupMatch && parseFloat(speedupMatch[1]) > 1) {
-                    // Files were transferred, so add the source path
-                    transferredFiles.push(pathPair.source);
-                    console.log(`[Rsync Exec] Detected remote-to-remote transfer with files transferred. Using source path: ${pathPair.source}`);
-                  }
-                } else {
-                  // Standard verbose output format
-                  for (const line of lines) {
-                    // Skip empty lines and summary lines
-                    if (!line.trim() || line.includes('sent ') || line.includes('total size')) continue;
+                  // With --itemize-changes, each line starts with flags like ">f++++++"
+                  // We're looking for lines that indicate a file was transferred
+                  const itemizeMatch = line.trim().match(/^([<>].*?) (.+)$/);
+                  
+                  if (itemizeMatch && itemizeMatch[2]) {
+                    // First character is '>' for sending, '<' for receiving
+                    // Second character is file type (f=file, d=directory, etc)
+                    // We only want to track actual files/dirs that were transferred
+                    const flags = itemizeMatch[1];
+                    const path = itemizeMatch[2];
                     
-                    // Extract the file path - try multiple patterns to match different rsync output formats
-                    const verboseMatch = line.trim().match(/^[<>ch.+*] (.+)$/);
-                    const simpleMatch = line.trim().match(/^(.+)$/);
-                    
-                    if (verboseMatch && verboseMatch[1]) {
-                      transferredFiles.push(verboseMatch[1]);
-                    } else if (simpleMatch && simpleMatch[1] && 
-                              !simpleMatch[1].startsWith('building') && 
-                              !simpleMatch[1].startsWith('sent') && 
-                              !simpleMatch[1].startsWith('total')) {
-                      transferredFiles.push(simpleMatch[1]);
+                    // Check if this was an actual transfer (not just a check)
+                    // For files that were actually transferred, there will be a '+' in the update flags
+                    if (flags.includes('+') || flags.includes('*') || flags.includes('c')) {
+                      transferredFiles.push(path);
                     }
                   }
                 }
@@ -976,13 +964,10 @@ async function executeRsyncCommand(task: Task, pathPair: PathPair, hostsList: Ho
                   console.log(`[Rsync Exec] Warning: Could not parse transferred files from rsync output for task ${task.name}`);
                   console.log(`[Rsync Exec] Rsync stdout: ${stdout}`);
                   
-                  // For remote-to-remote transfers that don't show detailed file lists,
-                  // check if any data was transferred at all based on the summary
-                  if (stdout.includes('total size is') && !stdout.includes('speedup is 0.00')) {
-                    // Some data was transferred, so use the source path as a fallback
-                    transferredFiles.push(pathPair.source);
-                    console.log(`[Rsync Exec] Using source path as fallback: ${pathPair.source}`);
-                  }
+                  // DO NOT fall back to using the entire source path
+                  // Instead, we'll skip updating the exclude file for this run
+                  console.log(`[Rsync Exec] No files were transferred or could be parsed from output. Skipping exclude file update.`);
+                  return; // Skip the rest of the function
                 }
                 
                 // Construct the project-specific exclude file path on the source host
