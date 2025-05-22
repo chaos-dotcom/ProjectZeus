@@ -963,8 +963,12 @@
                                 destinationHostId: destHostId,
                                 destinationPath: finalDestinationPath,
                                 flags: (() => {
-                                    // Both livework and turbosort will now get -u by default
-                                    let baseFlags = ['-a', '-v', '--delete', '-u']; 
+                                    let baseFlags;
+                                    if (config.type === 'livework') {
+                                        baseFlags = ['-a', '-v', '--delete', '-u']; // Keep --delete for livework
+                                    } else { // For turbosort
+                                        baseFlags = ['-a', '-v', '-u']; // Remove --delete for turbosort
+                                    }
                                     // --- DEBUGGING: Log config properties for flag generation ---
                                     console.log(`[Automation UI Flags] Config ID: ${config.id}, Type: ${config.type}, ProcessedLogFile: ${config.processedLogFile}, ScanPath: ${config.scanDirectoryPath}`);
                                     // --- END DEBUGGING ---
