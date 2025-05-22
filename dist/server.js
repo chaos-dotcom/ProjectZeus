@@ -525,7 +525,6 @@ app.post('/api/tasks', async (req, res) => {
     await saveData();
     res.status(201).json(newTask);
 });
-// --- Rsync Task Execution ---
 async function executeRsyncCommand(task, pathPair, hostsList) {
     const sourceHostObj = hostsList.find(h => h.id === task.sourceHost);
     const destinationHostObj = hostsList.find(h => h.id === task.destinationHost);
