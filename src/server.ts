@@ -21,7 +21,9 @@ app.get('/projectzeus.gif', (req, res) => {
       console.error('Error sending projectzeus.gif:', err);
       // Avoid sending HTML error page for a missing image, just end the response.
       if (!res.headersSent) {
-        res.status(err.status || 404).end();
+        // Check if err has a status property, otherwise default to 404
+        const statusCode = (err as any).status || (err as any).statusCode || 404;
+        res.status(statusCode).end();
       }
     }
   });
