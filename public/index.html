@@ -106,7 +106,7 @@
             <a href="#" data-tab="dashboard">Dashboard</a>
             <a href="#" data-tab="tasks" class="active-nav-link">Tasks</a>
             <a href="#" data-tab="hosts">Hosts</a>
-            <a href="#" data-tab="scanner">Scanner</a>
+            <a href="#" data-tab="automation">Automation</a>
             <a href="#" data-tab="logs">Logs</a>
             <a href="#" data-tab="settings">Settings</a>
         </nav>
@@ -146,24 +146,54 @@
         </div>
     </div>
 
-    <!-- Scanner Section -->
-    <div class="container tab-content" id="scanner-section">
-        <h2>File Scanner</h2>
-        <div class="host-form-container"> <!-- Reusing some styles -->
-            <h3>Scan Directory on Host</h3>
-            <form id="scanDirectoryForm" class="form-group">
-                <label for="scanHostSelect" style="min-width: auto; margin-right: 5px;">Host:</label>
-                <select id="scanHostSelect" style="flex-grow: 1; margin-right:10px;"></select>
-                
-                <label for="scanDirectoryPathInput" style="min-width: auto; margin-right: 5px;">Path:</label>
-                <input type="text" id="scanDirectoryPathInput" placeholder="/path/to/scan" style="flex-grow: 2; margin-right:10px;" required>
-                
-                <button type="submit" id="executeScanButton" class="btn btn-primary">Scan</button>
-            </form>
+    <!-- Automation Section -->
+    <div class="container tab-content" id="automation-section">
+        <h2>Automation</h2>
+
+        <!-- .livework File Automation -->
+        <div class="automation-subsection">
+            <h3>.livework File Automation</h3>
+            <div class="host-form-container"> <!-- Reusing some styles -->
+                <h4>Scan for .livework Files</h4>
+                <form id="liveworkScanForm" class="form-group">
+                    <label for="liveworkScanHostSelect" style="min-width: auto; margin-right: 5px;">Host:</label>
+                    <select id="liveworkScanHostSelect" style="flex-grow: 1; margin-right:10px;"></select>
+                    
+                    <label for="liveworkScanDirectoryPathInput" style="min-width: auto; margin-right: 5px;">Path:</label>
+                    <input type="text" id="liveworkScanDirectoryPathInput" placeholder="/path/to/scan" style="flex-grow: 2; margin-right:10px;" required>
+                    
+                    <button type="submit" id="liveworkExecuteScanButton" class="btn btn-primary">Scan for .livework</button>
+                </form>
+            </div>
+            <h5>Scan Results (.livework):</h5>
+            <div id="liveworkScanResultsList" style="padding:10px; border:1px solid #eee; min-height: 100px; background: #fdfdfd; margin-bottom: 20px;">
+                <p>Scan results for .livework files will appear here.</p>
+            </div>
+            <!-- Placeholder for job creation from template -->
+            <!-- <h4>Create Jobs from Template</h4> -->
         </div>
-        <h3>Scan Results:</h3>
-        <div id="scanResultsList" style="padding:10px; border:1px solid #eee; min-height: 100px; background: #fdfdfd;">
-            <p>Scan results will appear here.</p>
+
+        <!-- .turbosort File Automation -->
+        <div class="automation-subsection">
+            <h3>.turbosort File Automation</h3>
+            <div class="host-form-container"> <!-- Reusing some styles -->
+                <h4>Scan for .turbosort Files</h4>
+                <form id="turbosortScanForm" class="form-group">
+                    <label for="turbosortScanHostSelect" style="min-width: auto; margin-right: 5px;">Host:</label>
+                    <select id="turbosortScanHostSelect" style="flex-grow: 1; margin-right:10px;"></select>
+                    
+                    <label for="turbosortScanDirectoryPathInput" style="min-width: auto; margin-right: 5px;">Path:</label>
+                    <input type="text" id="turbosortScanDirectoryPathInput" placeholder="/path/to/scan" style="flex-grow: 2; margin-right:10px;" required>
+                    
+                    <button type="submit" id="turbosortExecuteScanButton" class="btn btn-primary">Scan for .turbosort</button>
+                </form>
+            </div>
+            <h5>Scan Results (.turbosort):</h5>
+            <div id="turbosortScanResultsList" style="padding:10px; border:1px solid #eee; min-height: 100px; background: #fdfdfd;">
+                <p>Scan results for .turbosort files will appear here.</p>
+            </div>
+            <!-- Placeholder for job creation from template -->
+            <!-- <h4>Create Jobs from Template</h4> -->
         </div>
     </div>
 
@@ -280,12 +310,20 @@
 
         let editingHostId = null; // To store the ID of the host being edited
 
-        // Scanner Elements
-        const scanDirectoryForm = document.getElementById('scanDirectoryForm');
-        const scanHostSelect = document.getElementById('scanHostSelect');
-        const scanDirectoryPathInput = document.getElementById('scanDirectoryPathInput');
-        const executeScanButton = document.getElementById('executeScanButton');
-        const scanResultsList = document.getElementById('scanResultsList');
+        // Automation Elements
+        // .livework
+        const liveworkScanForm = document.getElementById('liveworkScanForm');
+        const liveworkScanHostSelect = document.getElementById('liveworkScanHostSelect');
+        const liveworkScanDirectoryPathInput = document.getElementById('liveworkScanDirectoryPathInput');
+        const liveworkExecuteScanButton = document.getElementById('liveworkExecuteScanButton');
+        const liveworkScanResultsList = document.getElementById('liveworkScanResultsList');
+        // .turbosort
+        const turbosortScanForm = document.getElementById('turbosortScanForm');
+        const turbosortScanHostSelect = document.getElementById('turbosortScanHostSelect');
+        const turbosortScanDirectoryPathInput = document.getElementById('turbosortScanDirectoryPathInput');
+        const turbosortExecuteScanButton = document.getElementById('turbosortExecuteScanButton');
+        const turbosortScanResultsList = document.getElementById('turbosortScanResultsList');
+
 
         // Tab Navigation Elements
         const navLinks = document.querySelectorAll('nav a[data-tab]');
@@ -554,7 +592,8 @@
 
             sourceHostSelect.innerHTML = '';
             destinationHostSelect.innerHTML = '';
-            scanHostSelect.innerHTML = ''; // Also populate scanner host select
+            liveworkScanHostSelect.innerHTML = ''; 
+            turbosortScanHostSelect.innerHTML = '';
 
             hosts.forEach(host => {
                 const option = document.createElement('option');
@@ -562,19 +601,21 @@
                 option.textContent = host.alias;
                 sourceHostSelect.appendChild(option.cloneNode(true));
                 destinationHostSelect.appendChild(option.cloneNode(true));
-                scanHostSelect.appendChild(option); // Add to scanner host select
+                liveworkScanHostSelect.appendChild(option.cloneNode(true)); 
+                turbosortScanHostSelect.appendChild(option.cloneNode(true));
             });
             // Try to reselect previous values if they still exist
             sourceHostSelect.value = hosts.find(h => h.id === currentSourceVal) ? currentSourceVal : (hosts.length > 0 ? hosts[0].id : '');
             destinationHostSelect.value = hosts.find(h => h.id === currentDestVal) ? currentDestVal : (hosts.length > 0 ? hosts[0].id : '');
-            scanHostSelect.value = hosts.length > 0 ? hosts[0].id : ''; // Default scanner host
+            liveworkScanHostSelect.value = hosts.length > 0 ? hosts[0].id : ''; 
+            turbosortScanHostSelect.value = hosts.length > 0 ? hosts[0].id : '';
         }
 
-        // --- Scanner Tab Functionality ---
-        scanDirectoryForm.addEventListener('submit', async (event) => {
+        // --- Automation Tab Functionality ---
+        async function handleGenericScan(event, hostSelectElement, pathInputElement, buttonElement, resultsListElement, fileTypeString) {
             event.preventDefault();
-            const hostId = scanHostSelect.value;
-            const directoryPath = scanDirectoryPathInput.value.trim();
+            const hostId = hostSelectElement.value;
+            const directoryPath = pathInputElement.value.trim();
 
             if (!hostId) {
                 alert('Please select a host.');
@@ -585,21 +626,21 @@
                 return;
             }
 
-            executeScanButton.textContent = 'Scanning...';
-            executeScanButton.disabled = true;
-            scanResultsList.innerHTML = '<p>Scanning...</p>';
+            buttonElement.textContent = 'Scanning...';
+            buttonElement.disabled = true;
+            resultsListElement.innerHTML = '<p>Scanning...</p>';
 
             try {
                 const response = await fetch(`/api/hosts/${hostId}/scan-directory`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ directoryPath })
+                    body: JSON.stringify({ directoryPath }) // Backend currently scans for both
                 });
 
                 if (!response.ok) {
                     let errorMessage = `Scan failed. HTTP status: ${response.status}`;
                     try {
-                        const errorData = await response.json(); // Assuming error response is JSON
+                        const errorData = await response.json();
                         errorMessage = errorData.message || JSON.stringify(errorData);
                     } catch (e) {
                         const errorText = await response.text();
@@ -608,9 +649,12 @@
                     throw new Error(errorMessage);
                 }
 
-                const foundFiles = await response.json();
+                let foundFiles = await response.json();
+                // Filter on the client side for now, based on the specific scan type
+                foundFiles = foundFiles.filter(file => file.endsWith(fileTypeString));
+
                 if (foundFiles.length === 0) {
-                    scanResultsList.innerHTML = '<p>No .livework or .turbosort files found in the specified directory.</p>';
+                    resultsListElement.innerHTML = `<p>No ${fileTypeString} files found in the specified directory.</p>`;
                 } else {
                     const ul = document.createElement('ul');
                     foundFiles.forEach(file => {
@@ -618,17 +662,25 @@
                         li.textContent = file;
                         ul.appendChild(li);
                     });
-                    scanResultsList.innerHTML = '';
-                    scanResultsList.appendChild(ul);
+                    resultsListElement.innerHTML = '';
+                    resultsListElement.appendChild(ul);
                 }
 
             } catch (error) {
-                console.error('Error scanning directory:', error);
-                scanResultsList.innerHTML = `<p style="color:red;">Error: ${error.message}</p>`;
+                console.error(`Error scanning directory for ${fileTypeString}:`, error);
+                resultsListElement.innerHTML = `<p style="color:red;">Error: ${error.message}</p>`;
             } finally {
-                executeScanButton.textContent = 'Scan';
-                executeScanButton.disabled = false;
+                buttonElement.textContent = `Scan for ${fileTypeString}`;
+                buttonElement.disabled = false;
             }
+        }
+
+        liveworkScanForm.addEventListener('submit', (event) => {
+            handleGenericScan(event, liveworkScanHostSelect, liveworkScanDirectoryPathInput, liveworkExecuteScanButton, liveworkScanResultsList, '.livework');
+        });
+
+        turbosortScanForm.addEventListener('submit', (event) => {
+            handleGenericScan(event, turbosortScanHostSelect, turbosortScanDirectoryPathInput, turbosortExecuteScanButton, turbosortScanResultsList, '.turbosort');
         });
 
 
