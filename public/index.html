@@ -946,7 +946,7 @@
                                 sourcePath: rsyncSourcePath, // Use the path with a trailing slash
                                 destinationHostId: destHostId,
                                 destinationPath: finalDestinationPath,
-                                flags: ['-a', '-v', '--delete'], // Example default flags, no -z
+                                flags: config.type === 'livework' ? ['-a', '-v', '--delete', '-u'] : ['-a', '-v', '--delete'], // Add -u for livework
                                 automationConfigId: config.id, // Link to the automation config
                                 triggerFilePath: triggerFile,    // Link to the specific trigger file
                                 // scheduleEnabled: false, // Typically run once
