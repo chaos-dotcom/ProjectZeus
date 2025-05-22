@@ -1,26 +1,20 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="32" height="32">
-    <!-- Rainbow Flag Background -->
+    <!-- Rainbow Flag Background with 6 bars -->
     <defs>
         <linearGradient id="rainbowGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" style="stop-color:#FF0000;" />      <!-- Red -->
-            <stop offset="16.66%" style="stop-color:#FF0000;" />
-            <stop offset="16.66%" style="stop-color:#FF7F00;" /> <!-- Orange -->
-            <stop offset="33.32%" style="stop-color:#FF7F00;" />
-            <stop offset="33.32%" style="stop-color:#FFFF00;" /> <!-- Yellow -->
-            <stop offset="49.98%" style="stop-color:#FFFF00;" />
-            <stop offset="49.98%" style="stop-color:#00FF00;" /> <!-- Green -->
-            <stop offset="66.64%" style="stop-color:#00FF00;" />
-            <stop offset="66.64%" style="stop-color:#0000FF;" /> <!-- Blue -->
-            <stop offset="83.30%" style="stop-color:#0000FF;" />
-            <stop offset="83.30%" style="stop-color:#8B00FF;" /> <!-- Violet -->
+            <stop offset="0%" style="stop-color:#FF0000;" />    <!-- Red -->
+            <stop offset="16.67%" style="stop-color:#FF0000;" />
+            <stop offset="16.67%" style="stop-color:#FF7F00;" /> <!-- Orange -->
+            <stop offset="33.33%" style="stop-color:#FF7F00;" />
+            <stop offset="33.33%" style="stop-color:#FFFF00;" /> <!-- Yellow -->
+            <stop offset="50%" style="stop-color:#FFFF00;" />
+            <stop offset="50%" style="stop-color:#00FF00;" />    <!-- Green -->
+            <stop offset="66.67%" style="stop-color:#00FF00;" />
+            <stop offset="66.67%" style="stop-color:#0000FF;" /> <!-- Blue -->
+            <stop offset="83.33%" style="stop-color:#0000FF;" />
+            <stop offset="83.33%" style="stop-color:#8B00FF;" /> <!-- Violet -->
             <stop offset="100%" style="stop-color:#8B00FF;" />
         </linearGradient>
     </defs>
     <rect width="100" height="100" fill="url(#rainbowGradient)"/>
-    <!-- Letter Z, white with a slight dark outline for visibility -->
-    <text x="50%" y="78%" dominant-baseline="middle" text-anchor="middle" 
-          font-family="Arial, Helvetica, sans-serif" font-size="80" font-weight="bold" 
-          fill="white" stroke="#333" stroke-width="3" paint-order="stroke fill">
-        Z
-    </text>
 </svg>
