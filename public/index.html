@@ -869,6 +869,22 @@
             const config = automationConfigs.find(c => c.id === initialConfig.id) || initialConfig;
             console.log("[Automation] Using config for scan:", JSON.parse(JSON.stringify(config))); // Log the actual config being used
 
+            // --- Explicit check for processedLogFile for turbosort before proceeding ---
+            if (config.type === 'turbosort' && (!config.processedLogFile || config.processedLogFile.trim() === '')) {
+                automationScanResultsDisplay.innerHTML = `<p style="color:red; font-weight:bold;">Configuration Error for "${config.name}":</p>
+                    <p style="color:red;">The 'processedLogFile' is missing for this .turbosort automation. This file is needed for the 'one-and-done' feature.</p>
+                    <p style="color:red;"><b>Please Edit and Re-Save this automation configuration.</b> This will generate the necessary field.</p>`;
+                
+                // Re-enable scan button if it was disabled
+                const scanButtonImmediate = document.querySelector(`.scan-now-btn[data-config-id="${config.id}"]`);
+                if(scanButtonImmediate) {
+                    scanButtonImmediate.textContent = 'Scan for Files';
+                    scanButtonImmediate.disabled = false;
+                }
+                return; // Stop further execution of this scan
+            }
+            // --- End explicit check ---
+
             const scanButton = document.querySelector(`.scan-now-btn[data-config-id="${config.id}"]`);
             if(scanButton) {
                 scanButton.textContent = 'Scanning...';
