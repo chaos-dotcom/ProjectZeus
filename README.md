@@ -1,6 +1,6 @@
-# WebSync TS
+# Project Zeus
 
-WebSync TS is a web-based task manager for rsync, designed to help you add, schedule, and maintain rsync tasks in a modern and user-friendly interface. This project is built with TypeScript, Node.js, and Express.
+Project Zeus is a web-based task manager for rsync, designed to help you add, schedule, and maintain rsync tasks in a modern and user-friendly interface. This project is built with TypeScript, Node.js, and Express.
 
 ## Features
 
@@ -20,7 +20,7 @@ WebSync TS is a web-based task manager for rsync, designed to help you add, sche
 ## Project Structure
 
 ```
-websync-ts/
+project-zeus/
 ├── dist/                 # Compiled JavaScript output
 ├── node_modules/         # Project dependencies
 ├── public/               # Static frontend assets (HTML, CSS, client-side JS)
@@ -48,7 +48,7 @@ websync-ts/
 1.  **Clone the repository (if applicable):**
     ```bash
     git clone <repository-url>
-    cd websync-ts
+    cd project-zeus
     ```
 
 2.  **Install dependencies:**
@@ -80,7 +80,7 @@ websync-ts/
 
 ### Hosts Tab
 *   Add new hosts by providing an Alias, Username, Hostname/IP, and an optional Port.
-*   The "SSH Setup" button attempts to copy the WebSync TS server's `~/.ssh/websync_id_rsa.pub` key to the target host using the provided password (via `sshpass`). This key is then used for subsequent SSH operations like scanning and rsync. If the `websync_id_rsa` key pair doesn't exist on the WebSync TS server, it will be generated.
+*   The "SSH Setup" button attempts to copy the Project Zeus server's `~/.ssh/websync_id_rsa.pub` key to the target host using the provided password (via `sshpass`). This key is then used for subsequent SSH operations like scanning and rsync. If the `websync_id_rsa` key pair doesn't exist on the Project Zeus server, it will be generated.
 *   Edit or delete existing host configurations.
 
 ### Tasks Tab
@@ -153,7 +153,7 @@ The server exposes the following API endpoints:
     *   Response: `204 No Content`.
 
 *   **`POST /api/hosts/:id/ssh-copy-id`**
-    *   Description: Attempts to copy the WebSync TS server's public SSH key (`~/.ssh/websync_id_rsa.pub`) to the specified host. Generates the key pair if it doesn't exist on the server.
+    *   Description: Attempts to copy the Project Zeus server's public SSH key (`~/.ssh/websync_id_rsa.pub`) to the specified host. Generates the key pair if it doesn't exist on the server.
     *   Request Body:
         ```json
         { "password": "remote_host_password" }
@@ -292,4 +292,7 @@ The server exposes the following API endpoints:
 
 ---
 
-This README provides a good starting point for users and developers of WebSync TS.
+This README provides a good starting point for users and developers of Project Zeus.
+# Project Zeus
+
+WebSync TS is a web-based task manager for rsync, designed to help you add, schedule, and maintain rsync tasks in a modern and user-friendly interface. This project is built with TypeScript, Node.js, and Express.
