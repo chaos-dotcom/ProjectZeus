@@ -930,8 +930,8 @@ async function executeRsyncCommand(task: Task, pathPair: PathPair, hostsList: Ho
                 // Extract project name from the source path
                 const projectName = path.basename(pathPair.source.endsWith('/') ? pathPair.source.slice(0, -1) : pathPair.source);
                 
-                // Create a project-specific exclude file name
-                const projectSpecificExcludeFile = `${automationConfig.processedLogFile}_${projectName}.txt`;
+                // Place the exclude file inside the project folder itself
+                const excludeFilePathOnSource = path.join(pathPair.source, `.${projectName}_processed.txt`);
                 // Get the list of files that were transferred in this rsync operation
                 // We'll parse the stdout to get the list of files
                 const transferredFiles: string[] = [];
