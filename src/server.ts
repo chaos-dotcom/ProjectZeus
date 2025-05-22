@@ -678,13 +678,6 @@ async function executeRsyncCommand(task: Task, pathPair: PathPair, hostsList: Ho
     return { pathPair, success: false, stdout: '', stderr: 'Source or destination host not found.', command: '' };
   }
 
-  // Check for remote-to-remote scenario, which is not supported by the current rsync execution model
-  if (sourceHostObj.id !== 'localhost' && destinationHostObj.id !== 'localhost') {
-    const errMsg = 'Remote-to-remote transfers (where neither source nor destination is "Localhost") are not currently supported.';
-    console.error(`Rsync execution error for task ${task.name}: ${errMsg}`);
-    return { pathPair, success: false, stdout: '', stderr: errMsg, command: 'N/A (Remote-to-remote)' };
-  }
-
   const privateKeyPath = path.join(os.homedir(), '.ssh', 'websync_id_rsa');
   if (!fs.existsSync(privateKeyPath)) {
     // This key is essential for remote operations.
@@ -713,12 +706,29 @@ async function executeRsyncCommand(task: Task, pathPair: PathPair, hostsList: Ho
   const rsyncSshCommand = `ssh -i "${privateKeyPath}" ${sshPortForRsync ? `-p ${sshPortForRsync}` : ''} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null`;
   
   const flagsString = task.flags.join(' ');
-  // Add -e option only if at least one host is remote
-  const rsyncCommand = (sourceHostObj.id !== 'localhost' || destinationHostObj.id !== 'localhost')
-    ? `rsync ${flagsString} -e "${rsyncSshCommand}" "${sourceArg}" "${destinationArg}"`
-    : `rsync ${flagsString} "${sourceArg}" "${destinationArg}"`;
+  let rsyncCommand;
 
-  console.log(`Executing rsync: ${rsyncCommand}`); // Log the command for debugging
+  if (sourceHostObj.id !== 'localhost' && destinationHostObj.id !== 'localhost') {
+    // Remote-to-Remote: SSH into sourceHostObj and execute rsync from there to destinationHostObj
+    // This assumes sourceHostObj can SSH to destinationHostObj using its own keys (e.g., websync_id_rsa if copied there, or agent forwarding)
+    // For simplicity, we'll assume websync_id_rsa is on sourceHostObj and authorized on destinationHostObj.
+    // The 'rsyncSshCommand' here is for the *inner* rsync from RHA to RHB.
+    const innerRsyncSshCommand = `ssh -i "${privateKeyPath}" ${destinationHostObj.port ? `-p ${destinationHostObj.port}` : ''} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null`;
+    const remoteRsyncCommand = `rsync ${flagsString} -e \\"${innerRsyncSshCommand}\\" "${pathPair.source}" "${destinationHostObj.user}@${destinationHostObj.hostname}:${pathPair.destination}"`;
+    
+    // The outer SSH command to connect to sourceHostObj (RHA)
+    const outerSshPortOption = sourceHostObj.port ? `-p ${sourceHostObj.port}` : '';
+    rsyncCommand = `ssh -i "${privateKeyPath}" ${outerSshPortOption} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${sourceHostObj.user}@${sourceHostObj.hostname} "${remoteRsyncCommand.replace(/"/g, '\\"')}"`;
+    console.log(`Executing remote-to-remote rsync (via ${sourceHostObj.alias}): ${rsyncCommand.split(' ')[0]} ... details in task log`);
+  } else if (sourceHostObj.id !== 'localhost' || destinationHostObj.id !== 'localhost') {
+    // Local-to-Remote or Remote-to-Local
+    rsyncCommand = `rsync ${flagsString} -e "${rsyncSshCommand}" "${sourceArg}" "${destinationArg}"`;
+    console.log(`Executing rsync: ${rsyncCommand}`); 
+  } else {
+    // Local-to-Local
+    rsyncCommand = `rsync ${flagsString} "${sourceArg}" "${destinationArg}"`;
+    console.log(`Executing rsync: ${rsyncCommand}`);
+  }
 
   return new Promise<RsyncExecutionResult>((resolve) => {
     exec(rsyncCommand, (error, stdout, stderr) => {
