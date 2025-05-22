@@ -738,13 +738,17 @@
                 });
 
                 if (!scanResponse.ok) {
-                    let errorMessage = `Scan failed. HTTP status: ${response.status}`;
-                     try { const errorData = await response.json(); errorMessage = errorData.message || JSON.stringify(errorData); } catch (e) { const errorText = await response.text(); errorMessage = errorText || errorMessage; }
+                    let errorMessage = `Scan failed. HTTP status: ${scanResponse.status}`; // Corrected to scanResponse
+                    try { 
+                        const errorData = await scanResponse.json(); // Corrected to scanResponse
+                        errorMessage = errorData.message || JSON.stringify(errorData); 
+                    } catch (e) { 
+                        const errorText = await scanResponse.text(); // Corrected to scanResponse
+                        errorMessage = errorText || errorMessage; 
+                    }
                     throw new Error(errorMessage);
                 }
-
-                    throw new Error(errorMessage);
-                }
+                // Removed stray "throw new Error(errorMessage); }" and its closing brace that was here.
 
                 let allFoundFiles = await scanResponse.json();
                 const triggerFiles = allFoundFiles.filter(file => file.endsWith(`.${config.type}`));
