@@ -927,8 +927,8 @@
                             if (!existingTask) {
                                 newJobsToProposeDetails.push(jobDetail);
                             } else {
-                                const destHostAlias = currentHosts.find(h=>h.id === jobDetail.destinationHostId)?.alias || jobDetail.destinationHostId;
-                                skippedJobMessages.push(`Skipped: Task for trigger "${jobDetail.triggerFilePath}" to "${destHostAlias}" (Source: ${jobDetail.sourcePath}) already exists.`);
+                                // Use the existing task's name in the skipped message
+                                skippedJobMessages.push(`Skipped: Task "${existingTask.name}" (for trigger "${jobDetail.triggerFilePath}") already exists.`);
                             }
                         });
                     }
