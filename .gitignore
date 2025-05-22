@@ -1,3 +1,4 @@
 .aider*
 node_modules
 websync-data.json
+dist
