@@ -722,25 +722,28 @@ async function executeRsyncCommand(task: Task, pathPair: PathPair, hostsList: Ho
   let rsyncCommand: string;
 
   if (sourceHostObj.id !== 'localhost' && destinationHostObj.id !== 'localhost') {
-    // Remote-to-Remote: SSH into sourceHostObj and execute rsync from there to destinationHostObj
-    const innerSshOptions = `-i "${privateKeyPath}" ${destinationHostObj.port ? `-p ${destinationHostObj.port}` : ''} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes`;
-    // Ensure the -e command is properly quoted for the outer SSH, and then for rsync itself.
-    // Using single quotes around the -e argument for rsync, and escaping single quotes within.
-    const remoteRsyncCommand = `rsync ${flagsString} -e 'ssh ${innerSshOptions.replace(/'/g, "'\\''")}' '${pathPair.source.replace(/'/g, "'\\''")}' '${destinationHostObj.user}@${destinationHostObj.hostname}:${pathPair.destination.replace(/'/g, "'\\''")}'`;
-    
-    const outerSshPortOption = sourceHostObj.port ? `-p ${sourceHostObj.port}` : '';
-    // The command to be executed on the source host needs careful quoting.
-    rsyncCommand = `ssh -i "${privateKeyPath}" ${outerSshPortOption} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes ${sourceHostObj.user}@${sourceHostObj.hostname} "${remoteRsyncCommand.replace(/"/g, '\\"')}"`;
-    console.log(`Executing remote-to-remote rsync (via ${sourceHostObj.alias}): ${rsyncCommand.split(' ')[0]} ... details in task log`);
+    if (sourceHostObj.id === destinationHostObj.id) {
+      // Remote-to-SAME-Remote: SSH into the host and perform a local rsync there.
+      const remoteLocalRsyncCommand = `rsync ${flagsString} '${pathPair.source.replace(/'/g, "'\\''")}' '${pathPair.destination.replace(/'/g, "'\\''")}'`;
+      const sshPortOption = sourceHostObj.port ? `-p ${sourceHostObj.port}` : '';
+      rsyncCommand = `ssh -i "${privateKeyPath}" ${sshPortOption} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes ${sourceHostObj.user}@${sourceHostObj.hostname} "${remoteLocalRsyncCommand.replace(/"/g, '\\"')}"`;
+      console.log(`Executing remote-to-same-remote rsync (on ${sourceHostObj.alias}): ${rsyncCommand.split(' ')[0]} ... details in task log`);
+    } else {
+      // Remote-to-DIFFERENT-Remote: SSH into sourceHostObj and execute rsync from there to destinationHostObj
+      const innerSshOptions = `-i "${privateKeyPath}" ${destinationHostObj.port ? `-p ${destinationHostObj.port}` : ''} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes`;
+      const remoteRsyncCommand = `rsync ${flagsString} -e 'ssh ${innerSshOptions.replace(/'/g, "'\\''")}' '${pathPair.source.replace(/'/g, "'\\''")}' '${destinationHostObj.user}@${destinationHostObj.hostname}:${pathPair.destination.replace(/'/g, "'\\''")}'`;
+      const outerSshPortOption = sourceHostObj.port ? `-p ${sourceHostObj.port}` : '';
+      rsyncCommand = `ssh -i "${privateKeyPath}" ${outerSshPortOption} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes ${sourceHostObj.user}@${sourceHostObj.hostname} "${remoteRsyncCommand.replace(/"/g, '\\"')}"`;
+      console.log(`Executing remote-to-different-remote rsync (via ${sourceHostObj.alias}): ${rsyncCommand.split(' ')[0]} ... details in task log`);
+    }
   } else if (sourceHostObj.id !== 'localhost' || destinationHostObj.id !== 'localhost') {
     // Local-to-Remote or Remote-to-Local
-    // Using single quotes for the -e option for rsync
-    rsyncCommand = `rsync ${flagsString} -e 'ssh ${rsyncSshCommand.substring(4)}' "${sourceArg}" "${destinationArg}"`; // substring(4) to remove 'ssh ' from rsyncSshCommand as -e 'ssh ...'
-    console.log(`Executing rsync: ${rsyncCommand}`); 
+    rsyncCommand = `rsync ${flagsString} -e 'ssh ${rsyncSshCommand.substring(4)}' "${sourceArg}" "${destinationArg}"`;
+    console.log(`Executing rsync (local involved): ${rsyncCommand}`);
   } else {
     // Local-to-Local
     rsyncCommand = `rsync ${flagsString} "${sourceArg}" "${destinationArg}"`;
-    console.log(`Executing rsync: ${rsyncCommand}`);
+    console.log(`Executing rsync (local-to-local): ${rsyncCommand}`);
   }
 
   return new Promise<RsyncExecutionResult>((resolve) => {
