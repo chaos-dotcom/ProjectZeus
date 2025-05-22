@@ -137,6 +137,33 @@
             background-color: #d1ecf1;
             border-color: #bee5eb;
         }
+
+        /* Client-side Log Styles */
+        #logsDisplay {
+            height: 400px; 
+            overflow-y: auto; 
+            background: #282c34; /* Dark background */
+            color: #abb2bf;    /* Light grey text */
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+            white-space: pre-wrap; 
+            padding: 10px; 
+            border-radius: 4px;
+            font-size: 0.9em;
+            line-height: 1.4;
+        }
+        .log-entry {
+            padding: 2px 0;
+            border-bottom: 1px solid #3e4451;
+        }
+        .log-entry:last-child {
+            border-bottom: none;
+        }
+        .log-entry.console-error { color: #e06c75; /* Light red */ }
+        .log-entry.console-warn { color: #e5c07b; /* Yellow/Orange */ }
+        .log-entry.console-log { color: #98c379; /* Green */ }
+        .log-entry.console-info { color: #61afef; /* Blue */ }
+        .log-timestamp { color: #5c6370; margin-right: 5px; } /* Darker grey for timestamp */
+        .log-type { font-weight: bold; margin-right: 5px; }
     </style>
 </head>
 <body>
@@ -144,25 +171,12 @@
         <div id="messageBanner" class="message-banner" style="display:none;"></div>
         <h1>Project Zeus</h1>
         <nav>
-            <a href="#" data-tab="dashboard">Dashboard</a>
             <a href="#" data-tab="tasks" class="active-nav-link">Tasks</a>
             <a href="#" data-tab="hosts">Hosts</a>
             <a href="#" data-tab="automation">Automation</a>
             <a href="#" data-tab="logs">Logs</a>
-            <a href="#" data-tab="settings">Settings</a>
         </nav>
     </header>
-    <div class="container tab-content" id="dashboard-section">
-        <h2>Welcome to Project Zeus (Dashboard)</h2>
-        <p>This is the starting point for your new rsync task manager.</p>
-        <p>Features to be implemented:</p>
-        <ul>
-            <li>Host Management</li>
-            <li>Task Management &amp; Scheduling</li>
-            <li>Real-time Logging</li>
-            <li>Secure Web Interface</li>
-        </ul>
-    </div>
 
     <!-- Hosts Section -->
     <div class="container tab-content" id="hosts-section">
@@ -242,16 +256,13 @@
         </div>
     </div>
 
-    <!-- Logs Section Placeholder -->
+    <!-- Logs Section -->
     <div class="container tab-content" id="logs-section">
-        <h2>Logs</h2>
-        <p>Log content will appear here. (Not yet implemented)</p>
-    </div>
-
-    <!-- Settings Section Placeholder -->
-    <div class="container tab-content" id="settings-section">
-        <h2>Settings</h2>
-        <p>Application settings will be managed here. (Not yet implemented)</p>
+        <h2>Client-Side Logs</h2>
+        <button id="clearClientLogsButton" class="btn btn-danger" style="margin-bottom: 10px; background-color: #dc3545; color: white;">Clear Logs</button>
+        <div id="logsDisplay">
+            <p>Client-side console messages will appear here.</p>
+        </div>
     </div>
 
 
@@ -387,6 +398,11 @@
         let editingAutomationConfigId = null;
         let currentProposedJobs = []; // To store details for tasks to be created by the button
 
+        // Client-side logging elements
+        const logsDisplayElement = document.getElementById('logsDisplay');
+        const clearClientLogsButton = document.getElementById('clearClientLogsButton');
+        let clientLogs = [];
+
 
         // Tab Navigation Elements
         const navLinks = document.querySelectorAll('nav a[data-tab]');
@@ -409,6 +425,88 @@
                     messageBanner.style.display = 'none';
                 }, duration);
             }
+        }
+
+        // --- Client-Side Logging ---
+        function formatLogArgument(arg) {
+            if (arg instanceof Error) {
+                return `Error: ${arg.message}\n${arg.stack ? arg.stack : '(no stack trace)'}`;
+            }
+            if (typeof arg === 'object' && arg !== null) {
+                try {
+                    return JSON.stringify(arg, null, 2);
+                } catch (e) {
+                    return '[Unserializable Object]';
+                }
+            }
+            return String(arg);
+        }
+        
+        function renderClientLogs() {
+            if (!logsDisplayElement) return;
+            logsDisplayElement.innerHTML = ''; // Clear previous logs
+            clientLogs.forEach(log => {
+                const logEntry = document.createElement('div');
+                logEntry.className = `log-entry console-${log.type}`;
+                
+                const timestampSpan = document.createElement('span');
+                timestampSpan.className = 'log-timestamp';
+                timestampSpan.textContent = `[${log.timestamp.toLocaleTimeString()}]`;
+                
+                const typeSpan = document.createElement('span');
+                typeSpan.className = 'log-type';
+                typeSpan.textContent = `[${log.type.toUpperCase()}]`;
+
+                const messageSpan = document.createElement('span');
+                messageSpan.textContent = log.args.map(formatLogArgument).join(' ');
+
+                logEntry.appendChild(timestampSpan);
+                logEntry.appendChild(typeSpan);
+                logEntry.appendChild(messageSpan);
+                logsDisplayElement.appendChild(logEntry);
+            });
+            logsDisplayElement.scrollTop = logsDisplayElement.scrollHeight;
+        }
+
+        const originalConsoleLog = console.log;
+        console.log = (...args) => {
+            clientLogs.push({ type: 'log', args, timestamp: new Date() });
+            originalConsoleLog.apply(console, args);
+            if (document.getElementById('logs-section')?.classList.contains('active')) {
+                renderClientLogs();
+            }
+        };
+        const originalConsoleWarn = console.warn;
+        console.warn = (...args) => {
+            clientLogs.push({ type: 'warn', args, timestamp: new Date() });
+            originalConsoleWarn.apply(console, args);
+            if (document.getElementById('logs-section')?.classList.contains('active')) {
+                renderClientLogs();
+            }
+        };
+        const originalConsoleError = console.error;
+        console.error = (...args) => {
+            clientLogs.push({ type: 'error', args, timestamp: new Date() });
+            originalConsoleError.apply(console, args);
+            if (document.getElementById('logs-section')?.classList.contains('active')) {
+                renderClientLogs();
+            }
+        };
+         const originalConsoleInfo = console.info;
+        console.info = (...args) => {
+            clientLogs.push({ type: 'info', args, timestamp: new Date() });
+            originalConsoleInfo.apply(console, args);
+            if (document.getElementById('logs-section')?.classList.contains('active')) {
+                renderClientLogs();
+            }
+        };
+
+        if (clearClientLogsButton) {
+            clearClientLogsButton.addEventListener('click', () => {
+                clientLogs = [];
+                renderClientLogs();
+                showMessage('Client-side logs cleared.', 'info');
+            });
         }
         
         const rsyncFlags = [
@@ -448,6 +546,9 @@
                 content.classList.remove('active');
                 if (content.id === targetTabId + '-section') {
                     content.classList.add('active');
+                    if (targetTabId === 'logs') { // When Logs tab is activated, render logs
+                        renderClientLogs();
+                    }
                 }
             });
             navLinks.forEach(link => {

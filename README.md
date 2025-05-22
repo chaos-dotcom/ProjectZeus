@@ -6,7 +6,7 @@ Project Zeus is a web-based task manager for rsync, designed to help you add, sc
 
 *   **Web-Based UI:** Intuitive interface for managing rsync operations.
 *   **Host Management:** Add, edit, and delete remote hosts for rsync tasks. Includes SSH key setup assistance.
-*   **Task Management:**
+*   **Task Management (Default View):**
     *   Define rsync tasks with multiple source/destination path pairs.
     *   Select rsync flags from a predefined list or add custom ones.
     *   Manually run individual tasks or all tasks.
@@ -14,6 +14,7 @@ Project Zeus is a web-based task manager for rsync, designed to help you add, sc
     *   Configure automated scanning of directories on hosts for specific trigger files (`.livework`, `.turbosort`).
     *   Automatically propose and create rsync tasks based on found trigger files and configurable destination settings.
     *   Handles cleanup of tasks if trigger files are removed.
+*   **Client-Side Logging:** View console messages (logs, warnings, errors) directly in the "Logs" tab.
 *   **Data Persistence:** Host configurations, tasks, and automation configurations are saved to a local `websync-data.json` file.
 *   **Real-time Feedback:** In-page message banners for operations, with detailed console logging for task execution.
 
