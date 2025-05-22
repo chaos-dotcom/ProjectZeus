@@ -924,7 +924,7 @@ async function executeRsyncCommand(task: Task, pathPair: PathPair, hostsList: Ho
                 
                 const appendCommand = `echo '${processedEntry.replace(/'/g, "'\\''")}' >> '${excludeFilePathOnSource.replace(/'/g, "'\\''")}'`;
                 let commandToRunOnSourceHost = appendCommand;
-                const privateKeyPath = path.join(os.homedir(), '.ssh', 'websync_id_rsa'); // Define here or ensure accessible
+                // privateKeyPath is already defined in the outer scope of executeRsyncCommand
 
                 if (sourceHostObj.id !== 'localhost') {
                   const sshPortOption = sourceHostObj.port ? `-p ${sourceHostObj.port}` : '';
