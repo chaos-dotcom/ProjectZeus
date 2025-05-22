@@ -74,21 +74,6 @@ app.post('/api/hosts', (req, res) => {
   res.status(201).json(newHost);
 });
 
-// DELETE a host
-app.delete('/api/hosts/:id', (req, res) => {
-  const { id } = req.params;
-  // Prevent deleting the default 'localhost' entry if it's special
-  if (id === 'localhost') {
-      return res.status(400).json({ message: 'Cannot delete the default Localhost entry.' });
-  }
-  const hostIndex = hosts.findIndex(h => h.id === id);
-  if (hostIndex === -1) {
-    return res.status(404).json({ message: 'Host not found' });
-  }
-  hosts.splice(hostIndex, 1);
-  res.status(204).send(); // No content
-});
-
 // PUT (update) an existing host
 app.put('/api/hosts/:id', (req, res) => {
   const { id } = req.params;
@@ -131,6 +116,21 @@ app.put('/api/hosts/:id', (req, res) => {
 
 
   res.json(hosts[hostIndex]);
+});
+
+// DELETE a host
+app.delete('/api/hosts/:id', (req, res) => {
+  const { id } = req.params;
+  // Prevent deleting the default 'localhost' entry if it's special
+  if (id === 'localhost') {
+      return res.status(400).json({ message: 'Cannot delete the default Localhost entry.' });
+  }
+  const hostIndex = hosts.findIndex(h => h.id === id);
+  if (hostIndex === -1) {
+    return res.status(404).json({ message: 'Host not found' });
+  }
+  hosts.splice(hostIndex, 1);
+  res.status(204).send(); // No content
 });
 
 
