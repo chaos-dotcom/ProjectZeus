@@ -7,8 +7,11 @@
     <style>
         body { font-family: sans-serif; margin: 20px; background-color: #f4f4f4; color: #333; }
         header { background-color: #333; color: #fff; padding: 1em 0; text-align: center; }
-        nav a { color: #fff; margin: 0 15px; text-decoration: none; }
+        nav a { color: #fff; margin: 0 15px; text-decoration: none; cursor: pointer; }
+        nav a.active-nav-link { font-weight: bold; border-bottom: 2px solid #fff; }
         .container { max-width: 960px; margin: 20px auto; padding: 20px; background-color: #fff; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        .tab-content { display: none; } /* Hide tabs by default */
+        .tab-content.active { display: block; } /* Show active tab */
         h1, h2 { color: #333; }
 
         /* Task specific styles */
@@ -35,6 +38,40 @@
         .task-actions { text-align: right; margin-top: 15px; }
         .task-item { background-color: #e9ecef; padding: 10px; margin-bottom: 5px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; }
         .task-item .btn-delete { background-color: #dc3545; color: white; padding: 5px 10px; border: none; border-radius: 4px; cursor: pointer; }
+
+        /* Host specific styles */
+        .host-form-container { border: 1px solid #ccc; padding: 15px; margin-bottom: 20px; background-color: #f9f9f9; }
+        .host-form-container .form-group { margin-bottom: 10px; display: flex; align-items: center; }
+        .host-form-container .form-group label { min-width: 80px; margin-right: 10px; }
+        .host-form-container input[type="text"], .host-form-container input[type="number"] {
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            margin-right: 10px; /* Spacing between inputs */
+        }
+        .host-form-container .host-alias-input { flex-grow: 1; }
+        .host-form-container .host-user-input { width: 150px; }
+        .host-form-container .host-hostname-input { flex-grow: 2; }
+        .host-form-container .host-port-input { width: 100px; }
+        .host-form-container .btn { padding: 8px 12px; border: none; border-radius: 4px; cursor: pointer; margin-left: 5px; }
+        .host-form-container .btn-primary { background-color: #007bff; color: white; }
+
+        .host-item { 
+            display: flex; 
+            align-items: center; 
+            padding: 10px; 
+            border: 1px solid #ddd; 
+            background-color: #f9f9f9; 
+            margin-bottom: 10px; 
+            border-radius: 4px;
+        }
+        .host-item > div { margin-right: 10px; }
+        .host-item .host-alias { font-weight: bold; min-width: 150px; }
+        .host-item .host-connection-string { flex-grow: 1; color: #555; }
+        .host-item .btn { padding: 8px 12px; border: none; border-radius: 4px; cursor: pointer; margin-left: 5px; font-size: 0.9em; }
+        .host-item .btn-ssh { background-color: #17a2b8; color: white; }
+        .host-item .btn-delete-host { background-color: #dc3545; color: white; }
+
 
         .flags-button-container { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; padding: 10px; border: 1px solid #ddd; background-color: #fff; }
         .flag-btn { 
@@ -66,15 +103,15 @@
     <header>
         <h1>WebSync TS</h1>
         <nav>
-            <a href="#">Dashboard</a>
-            <a href="#">Hosts</a>
-            <a href="#">Tasks</a>
-            <a href="#">Logs</a>
-            <a href="#">Settings</a>
+            <a href="#" data-tab="dashboard">Dashboard</a>
+            <a href="#" data-tab="tasks" class="active-nav-link">Tasks</a>
+            <a href="#" data-tab="hosts">Hosts</a>
+            <a href="#" data-tab="logs">Logs</a>
+            <a href="#" data-tab="settings">Settings</a>
         </nav>
     </header>
-    <div class="container">
-        <h2>Welcome to WebSync TS</h2>
+    <div class="container tab-content" id="dashboard-section">
+        <h2>Welcome to WebSync TS (Dashboard)</h2>
         <p>This is the starting point for your new rsync task manager.</p>
         <p>Features to be implemented:</p>
         <ul>
@@ -85,7 +122,30 @@
         </ul>
     </div>
 
-    <div class="container" id="tasks-section">
+    <!-- Hosts Section -->
+    <div class="container tab-content" id="hosts-section">
+        <h2>Manage Hosts</h2>
+        <div class="host-form-container">
+            <h3>Add New Host</h3>
+            <form id="addHostForm" class="form-group">
+                <input type="text" id="hostAliasInput" class="host-alias-input" placeholder="Alias" required>
+                <input type="text" id="hostUserInput" class="host-user-input" placeholder="Username" required>
+                <span style="margin-right: 5px;">@</span>
+                <input type="text" id="hostHostnameInput" class="host-hostname-input" placeholder="Hostname or IP" required>
+                <span style="margin-right: 5px;">:</span>
+                <input type="number" id="hostPortInput" class="host-port-input" placeholder="Port (optional)">
+                <button type="submit" class="btn btn-primary">Add Host</button>
+            </form>
+        </div>
+
+        <h3>Current Hosts:</h3>
+        <div id="hostsList">
+            <!-- Hosts will be listed here -->
+        </div>
+    </div>
+
+
+    <div class="container tab-content active" id="tasks-section">
         <h2>Tasks</h2>
 
         <!-- This will be the main task editor/creator form -->
@@ -184,7 +244,20 @@
         const toggleLogBtn = document.getElementById('toggleLogBtn');
         const logContainer = document.getElementById('logContainer');
 
+        // Host Management Elements
+        const addHostForm = document.getElementById('addHostForm');
+        const hostAliasInput = document.getElementById('hostAliasInput');
+        const hostUserInput = document.getElementById('hostUserInput');
+        const hostHostnameInput = document.getElementById('hostHostnameInput');
+        const hostPortInput = document.getElementById('hostPortInput');
+        const hostsListElement = document.getElementById('hostsList');
+
+        // Tab Navigation Elements
+        const navLinks = document.querySelectorAll('nav a[data-tab]');
+        const tabContents = document.querySelectorAll('.tab-content');
+
         let scheduleEnabled = false;
+        let currentHosts = []; // To store fetched hosts for populating dropdowns
         
         const rsyncFlags = [
             { label: 'verbose', value: '-v' }, { label: 'quiet', value: '-q' }, { label: 'checksum', value: '-c' }, 
@@ -215,6 +288,144 @@
                 });
                 flagsButtonContainer.appendChild(button);
             });
+        }
+
+        // --- Tab Navigation ---
+        function setActiveTab(targetTabId) {
+            tabContents.forEach(content => {
+                content.classList.remove('active');
+                if (content.id === targetTabId + '-section') {
+                    content.classList.add('active');
+                }
+            });
+            navLinks.forEach(link => {
+                link.classList.remove('active-nav-link');
+                if (link.dataset.tab === targetTabId) {
+                    link.classList.add('active-nav-link');
+                }
+            });
+        }
+
+        navLinks.forEach(link => {
+            link.addEventListener('click', (event) => {
+                event.preventDefault();
+                const targetTabId = link.dataset.tab;
+                setActiveTab(targetTabId);
+            });
+        });
+
+        // --- Host Management ---
+        async function fetchAndRenderHosts() {
+            try {
+                const response = await fetch('/api/hosts');
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                currentHosts = await response.json();
+                renderHostsList(currentHosts);
+                populateHostDropdowns(currentHosts); // Populate task host dropdowns
+            } catch (error) {
+                console.error('Error fetching hosts:', error);
+                hostsListElement.innerHTML = '<p>Error loading hosts.</p>';
+            }
+        }
+
+        function renderHostsList(hosts) {
+            hostsListElement.innerHTML = '';
+            if (hosts.length === 0) {
+                hostsListElement.innerHTML = '<p>No hosts configured yet.</p>';
+                return;
+            }
+            hosts.forEach(host => {
+                const hostItem = document.createElement('div');
+                hostItem.className = 'host-item';
+                hostItem.dataset.hostId = host.id;
+
+                const portString = host.port ? `:${host.port}` : '';
+                const connectionString = host.id === 'localhost' ? 'Local System' : `${host.user}@${host.hostname}${portString}`;
+
+                hostItem.innerHTML = `
+                    <div class="host-alias">${host.alias}</div>
+                    <div class="host-connection-string">${connectionString}</div>
+                    <div>
+                        ${host.id !== 'localhost' ? '<button class="btn btn-ssh">SSH Setup</button>' : ''}
+                        ${host.id !== 'localhost' ? `<button class="btn btn-delete-host" data-id="${host.id}">Delete</button>` : ''}
+                    </div>
+                `;
+                
+                if (host.id !== 'localhost') {
+                    hostItem.querySelector('.btn-delete-host').addEventListener('click', async () => {
+                        if (confirm(`Are you sure you want to delete host "${host.alias}"?`)) {
+                            try {
+                                const res = await fetch(`/api/hosts/${host.id}`, { method: 'DELETE' });
+                                if (!res.ok) throw new Error(`Failed to delete host. Status: ${res.status}`);
+                                fetchAndRenderHosts(); // Refresh list
+                            } catch (err) {
+                                console.error('Error deleting host:', err);
+                                alert(`Error deleting host: ${err.message}`);
+                            }
+                        }
+                    });
+                    // Placeholder for SSH setup button
+                     hostItem.querySelector('.btn-ssh')?.addEventListener('click', () => {
+                        alert(`SSH Setup for ${host.alias} - Not implemented yet.`);
+                    });
+                }
+                hostsListElement.appendChild(hostItem);
+            });
+        }
+
+        addHostForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const newHost = {
+                alias: hostAliasInput.value.trim(),
+                user: hostUserInput.value.trim(),
+                hostname: hostHostnameInput.value.trim(),
+                port: hostPortInput.value.trim() ? parseInt(hostPortInput.value.trim(), 10) : undefined
+            };
+
+            if (!newHost.alias || !newHost.user || !newHost.hostname) {
+                alert('Alias, User, and Hostname are required.');
+                return;
+            }
+            if (newHost.port && (isNaN(newHost.port) || newHost.port <= 0 || newHost.port > 65535)) {
+                 alert('Port must be a valid number between 1 and 65535.');
+                 return;
+            }
+
+            try {
+                const response = await fetch('/api/hosts', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(newHost)
+                });
+                if (!response.ok) {
+                     const errorData = await response.json();
+                    throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+                }
+                addHostForm.reset();
+                fetchAndRenderHosts(); // Refresh list and dropdowns
+            } catch (error) {
+                console.error('Error adding host:', error);
+                alert(`Error adding host: ${error.message}`);
+            }
+        });
+
+        function populateHostDropdowns(hosts) {
+            const currentSourceVal = sourceHostSelect.value;
+            const currentDestVal = destinationHostSelect.value;
+
+            sourceHostSelect.innerHTML = '';
+            destinationHostSelect.innerHTML = '';
+
+            hosts.forEach(host => {
+                const option = document.createElement('option');
+                option.value = host.id; // Use host ID as value
+                option.textContent = host.alias;
+                sourceHostSelect.appendChild(option.cloneNode(true));
+                destinationHostSelect.appendChild(option);
+            });
+            // Try to reselect previous values if they still exist
+            sourceHostSelect.value = hosts.find(h => h.id === currentSourceVal) ? currentSourceVal : (hosts.length > 0 ? hosts[0].id : '');
+            destinationHostSelect.value = hosts.find(h => h.id === currentDestVal) ? currentDestVal : (hosts.length > 0 ? hosts[0].id : '');
         }
 
 
@@ -386,11 +597,17 @@
         // Event listeners
         taskForm.addEventListener('submit', handleSaveTask);
 
-        // Initial load of tasks
+        // Initial load
         document.addEventListener('DOMContentLoaded', () => {
-            initializeFlagButtons();
-            fetchAndRenderTasks();
-            // Ensure the first path pair's remove button is hidden
+            initializeFlagButtons(); // For task form
+            fetchAndRenderHosts();   // Fetch hosts first to populate dropdowns
+            fetchAndRenderTasks();   // Then fetch tasks
+            
+            // Set initial active tab (Tasks)
+            setActiveTab('tasks');
+
+
+            // Ensure the first path pair's remove button is hidden in task form
             const firstPathPair = pathPairsContainer.querySelector('.path-pair .remove-path');
             if (firstPathPair) {
                 firstPathPair.style.display = 'none';
