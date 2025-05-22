@@ -36,6 +36,23 @@
         .task-item { background-color: #e9ecef; padding: 10px; margin-bottom: 5px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; }
         .task-item .btn-delete { background-color: #dc3545; color: white; padding: 5px 10px; border: none; border-radius: 4px; cursor: pointer; }
 
+        .flags-button-container { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; padding: 10px; border: 1px solid #ddd; background-color: #fff; }
+        .flag-btn { 
+            background-color: #f0f0f0; 
+            color: #333; 
+            border: 1px solid #ccc; 
+            padding: 5px 10px; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            font-size: 0.9em;
+            margin: 0; /* Override .task-editor .btn margin-left */
+        }
+        .flag-btn.active { 
+            background-color: #007bff; 
+            color: white; 
+            border-color: #0056b3;
+        }
+        
         /* Simple tabs for later */
         .tabs { display: flex; border-bottom: 1px solid #ccc; margin-bottom: 15px; }
         .tabs button { background: none; border: none; padding: 10px 15px; cursor: pointer; font-size: 1em; }
@@ -105,14 +122,13 @@
                 </div>
                 <button type="button" id="addPathPair" class="btn btn-success" style="margin-top:5px;">Add Path</button>
 
-                <div class="form-group" style="margin-top:15px;">
-                    <label for="taskFlags">Flags:</label>
-                    <textarea id="taskFlags" rows="2" placeholder="e.g. -avz --delete"></textarea>
+                <div class="form-group" style="margin-top:15px; align-items: flex-start;">
+                    <label for="flagsButtonContainer" style="padding-top: 8px;">Flags:</label>
+                    <div id="flagsButtonContainer" class="flags-button-container">
+                        <!-- Flag buttons will be inserted here by JavaScript -->
+                    </div>
                 </div>
-                <!-- For later: Clickable flags -->
-                <!-- <div class="flags-container" id="flagsContainer"></div> -->
-
-
+                
                 <h4>Schedule:</h4>
                 <div class="form-group schedule-toggle">
                     <label>Status:</label>
@@ -158,7 +174,8 @@
         const destinationHostSelect = document.getElementById('destinationHost');
         const pathPairsContainer = document.getElementById('pathPairsContainer');
         const addPathPairButton = document.getElementById('addPathPair');
-        const taskFlagsTextarea = document.getElementById('taskFlags');
+        // const taskFlagsTextarea = document.getElementById('taskFlags'); // Removed
+        const flagsButtonContainer = document.getElementById('flagsButtonContainer');
         const scheduleOnBtn = document.getElementById('scheduleOnBtn');
         const scheduleOffBtn = document.getElementById('scheduleOffBtn');
         const scheduleDetailsContainer = document.getElementById('scheduleDetailsContainer');
@@ -168,6 +185,38 @@
         const logContainer = document.getElementById('logContainer');
 
         let scheduleEnabled = false;
+        
+        const rsyncFlags = [
+            { label: 'verbose', value: '-v' }, { label: 'quiet', value: '-q' }, { label: 'checksum', value: '-c' }, 
+            { label: 'archive', value: '-a' }, { label: 'recursive', value: '-r' }, { label: 'relative', value: '-R' },
+            { label: 'backup', value: '-b' }, { label: 'update', value: '-u' }, { label: 'dirs', value: '-d' },
+            { label: 'links', value: '-l' }, { label: 'copy-links', value: '-L' }, { label: 'copy-dirlinks', value: '-k' },
+            { label: 'keep-dirlinks', value: '-K' }, { label: 'hard-links', value: '-H' }, { label: 'perms', value: '-p' },
+            { label: 'executability', value: '-E' }, { label: 'acls', value: '-A' }, { label: 'xattrs', value: '-X' },
+            { label: 'owner', value: '-o' }, { label: 'group', value: '-g' }, { label: 'times', value: '-t' },
+            { label: 'omit-dir-times', value: '-O' }, { label: 'sparse', value: '-S' }, { label: 'whole-file', value: '--whole-file' },
+            { label: 'one-file-system', value: '-x' }, { label: 'prune-empty-dirs', value: '-m' }, { label: 'ignore-times', value: '--ignore-times' },
+            { label: 'fuzzy', value: '-y' }, { label: 'compress', value: '-z' }, { label: 'cvs-exclude', value: '-C' },
+            { label: 'from0', value: '--from0' }, { label: 'protect-args', value: '-s' }, { label: '8-bit-output', value: '--8-bit-output' },
+            { label: 'human-readable', value: '-h' }, { label: 'itemize-changes', value: '-i' },
+            { label: 'ipv4', value: '-4' }, { label: 'ipv6', value: '-6' }
+            // Add more flags as needed, ensure 'value' is the actual rsync flag
+        ];
+
+        function initializeFlagButtons() {
+            rsyncFlags.forEach(flag => {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'flag-btn';
+                button.textContent = flag.label;
+                button.dataset.flag = flag.value;
+                button.addEventListener('click', () => {
+                    button.classList.toggle('active');
+                });
+                flagsButtonContainer.appendChild(button);
+            });
+        }
+
 
         // Function to fetch tasks and render them
         async function fetchAndRenderTasks() {
@@ -283,9 +332,10 @@
                 return;
             }
 
-            const flagsRaw = taskFlagsTextarea.value.trim();
-            // Split flags by space, respecting quotes later if needed
-            const flags = flagsRaw ? flagsRaw.split(/\s+/) : [];
+            const selectedFlags = [];
+            flagsButtonContainer.querySelectorAll('.flag-btn.active').forEach(button => {
+                selectedFlags.push(button.dataset.flag);
+            });
 
 
             const taskData = {
@@ -293,7 +343,7 @@
                 sourceHost: sourceHostSelect.value,
                 destinationHost: destinationHostSelect.value,
                 paths: paths,
-                flags: flags,
+                flags: selectedFlags,
                 scheduleEnabled: scheduleEnabled,
                 scheduleDetails: scheduleEnabled ? scheduleDetailsInput.value.trim() : undefined,
             };
@@ -318,6 +368,11 @@
                 pathPairsContainer.innerHTML = '';
                 pathPairsContainer.appendChild(createPathPairElement());
                 pathPairsContainer.querySelector('.remove-path').style.display = 'none';
+                
+                // Reset flag buttons
+                flagsButtonContainer.querySelectorAll('.flag-btn.active').forEach(button => {
+                    button.classList.remove('active');
+                });
 
                 // Reset schedule
                 scheduleOffBtn.click(); 
@@ -333,6 +388,7 @@
 
         // Initial load of tasks
         document.addEventListener('DOMContentLoaded', () => {
+            initializeFlagButtons();
             fetchAndRenderTasks();
             // Ensure the first path pair's remove button is hidden
             const firstPathPair = pathPairsContainer.querySelector('.path-pair .remove-path');
