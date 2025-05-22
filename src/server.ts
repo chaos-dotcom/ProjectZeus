@@ -837,9 +837,14 @@ async function executeRsyncCommand(task: Task, pathPair: PathPair, hostsList: Ho
       // Extract project name from the source path
       const projectName = path.basename(pathPair.source.endsWith('/') ? pathPair.source.slice(0, -1) : pathPair.source);
       
-      // Create a project-specific exclude file name
+      // Create a project-specific exclude file name that will be stored inside the project folder
       const projectSpecificExcludeFile = `${automationConfig.processedLogFile}_${projectName}.txt`;
-      let excludeFilePathOnSource = path.join(automationConfig.scanDirectoryPath, projectSpecificExcludeFile);
+      
+      // Place the exclude file inside the project folder itself
+      let excludeFilePathOnSource = path.join(pathPair.source, `.${projectName}_processed.txt`);
+      
+      // For debugging
+      console.log(`[Rsync Exec] Using project-specific exclude file: ${excludeFilePathOnSource} for project: ${projectName}`);
       
       // --- Ensure the exclude file exists on the source host BEFORE rsync ---
       const touchCommand = `touch '${excludeFilePathOnSource.replace(/'/g, "'\\''")}'`;
