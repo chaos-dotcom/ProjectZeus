@@ -10,6 +10,39 @@
         nav a { color: #fff; margin: 0 15px; text-decoration: none; }
         .container { max-width: 960px; margin: 20px auto; padding: 20px; background-color: #fff; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
         h1, h2 { color: #333; }
+
+        /* Task specific styles */
+        .task-editor { border: 1px solid #ccc; padding: 15px; margin-bottom: 20px; background-color: #f9f9f9; }
+        .task-editor .form-group { margin-bottom: 10px; display: flex; align-items: center; }
+        .task-editor .form-group label { min-width: 120px; margin-right: 10px; }
+        .task-editor input[type="text"], .task-editor select, .task-editor textarea {
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            flex-grow: 1;
+        }
+        .task-editor .path-pair { display: flex; align-items: center; margin-bottom: 5px; }
+        .task-editor .path-pair input[type="text"] { margin-right: 5px; }
+        .task-editor .path-pair .arrow { margin: 0 5px; }
+        .task-editor .btn { padding: 8px 12px; border: none; border-radius: 4px; cursor: pointer; margin-left: 5px; }
+        .task-editor .btn-danger { background-color: #dc3545; color: white; }
+        .task-editor .btn-success { background-color: #28a745; color: white; }
+        .task-editor .btn-primary { background-color: #007bff; color: white; }
+        .task-editor .flags-container { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; }
+        .task-editor .flag-tag { background-color: #007bff; color: white; padding: 5px 8px; border-radius: 4px; font-size: 0.9em; }
+        .task-editor .schedule-toggle { display: flex; align-items: center; }
+        .task-editor .schedule-toggle button { margin-left: 10px; }
+        .task-actions { text-align: right; margin-top: 15px; }
+        .task-item { background-color: #e9ecef; padding: 10px; margin-bottom: 5px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; }
+        .task-item .btn-delete { background-color: #dc3545; color: white; padding: 5px 10px; border: none; border-radius: 4px; cursor: pointer; }
+
+        /* Simple tabs for later */
+        .tabs { display: flex; border-bottom: 1px solid #ccc; margin-bottom: 15px; }
+        .tabs button { background: none; border: none; padding: 10px 15px; cursor: pointer; font-size: 1em; }
+        .tabs button.active { border-bottom: 2px solid #007bff; font-weight: bold; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
     </style>
 </head>
 <body>
@@ -37,17 +70,80 @@
 
     <div class="container" id="tasks-section">
         <h2>Tasks</h2>
-        <form id="addTaskForm">
-            <div>
-                <label for="taskName">Task Name:</label>
-                <input type="text" id="taskName" name="taskName" required>
-            </div>
-            <button type="submit">Add Task</button>
-        </form>
+
+        <!-- This will be the main task editor/creator form -->
+        <div class="task-editor" id="taskEditorFormContainer">
+            <h3>Add New Task / Edit Task</h3>
+            <form id="taskForm">
+                <div class="form-group">
+                    <label for="taskNameInput">Task Name:</label>
+                    <input type="text" id="taskNameInput" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="sourceHost">Source:</label>
+                    <select id="sourceHost">
+                        <option value="localhost">Localhost</option>
+                        <!-- Hosts will be populated here later -->
+                    </select>
+                    <label for="destinationHost" style="min-width: auto; margin-left:10px;">Destination:</label>
+                    <select id="destinationHost">
+                        <option value="localhost">Localhost</option>
+                        <!-- Hosts will be populated here later -->
+                    </select>
+                </div>
+                
+                <h4>Paths:</h4>
+                <div id="pathPairsContainer">
+                    <!-- Path pairs will be added here by JS -->
+                    <div class="path-pair">
+                        <input type="text" class="source-path" placeholder="Source Path">
+                        <span class="arrow">&rarr;</span>
+                        <input type="text" class="destination-path" placeholder="Destination Path">
+                        <button type="button" class="btn btn-danger remove-path" style="display:none;">&times;</button>
+                    </div>
+                </div>
+                <button type="button" id="addPathPair" class="btn btn-success" style="margin-top:5px;">Add Path</button>
+
+                <div class="form-group" style="margin-top:15px;">
+                    <label for="taskFlags">Flags:</label>
+                    <textarea id="taskFlags" rows="2" placeholder="e.g. -avz --delete"></textarea>
+                </div>
+                <!-- For later: Clickable flags -->
+                <!-- <div class="flags-container" id="flagsContainer"></div> -->
+
+
+                <h4>Schedule:</h4>
+                <div class="form-group schedule-toggle">
+                    <label>Status:</label>
+                    <button type="button" id="scheduleOffBtn" class="btn active">Off</button>
+                    <button type="button" id="scheduleOnBtn" class="btn">On</button>
+                </div>
+                <div id="scheduleDetailsContainer" style="display:none;">
+                    <div class="form-group">
+                        <label for="scheduleDetailsInput">Details:</label>
+                        <input type="text" id="scheduleDetailsInput" placeholder="e.g., Every Hour, or cron string">
+                    </div>
+                </div>
+                
+                <!-- Log section placeholder -->
+                <h4>Log <button type="button" class="btn" id="toggleLogBtn" style="font-size:0.8em; padding: 2px 5px;">+</button></h4>
+                <div id="logContainer" style="display:none; border:1px solid #eee; padding:10px; min-height:50px; background:#fff;">
+                    <p>Log output will appear here...</p>
+                </div>
+
+                <div class="task-actions">
+                    <button type="submit" class="btn btn-primary">Save Task</button>
+                    <button type="button" id="runTaskBtn" class="btn btn-success">Run</button>
+                    <button type="button" id="testTaskBtn" class="btn">Test</button>
+                </div>
+            </form>
+        </div>
+
         <h3>Current Tasks:</h3>
-        <ul id="tasksList">
-            <!-- Tasks will be listed here -->
-        </ul>
+        <div id="tasksList">
+            <!-- Tasks will be listed here as items -->
+        </div>
     </div>
 
     <footer>
@@ -55,9 +151,23 @@
     </footer>
 
     <script>
-        const tasksList = document.getElementById('tasksList');
-        const addTaskForm = document.getElementById('addTaskForm');
-        const taskNameInput = document.getElementById('taskName');
+        const tasksListElement = document.getElementById('tasksList');
+        const taskForm = document.getElementById('taskForm');
+        const taskNameInput = document.getElementById('taskNameInput');
+        const sourceHostSelect = document.getElementById('sourceHost');
+        const destinationHostSelect = document.getElementById('destinationHost');
+        const pathPairsContainer = document.getElementById('pathPairsContainer');
+        const addPathPairButton = document.getElementById('addPathPair');
+        const taskFlagsTextarea = document.getElementById('taskFlags');
+        const scheduleOnBtn = document.getElementById('scheduleOnBtn');
+        const scheduleOffBtn = document.getElementById('scheduleOffBtn');
+        const scheduleDetailsContainer = document.getElementById('scheduleDetailsContainer');
+        const scheduleDetailsInput = document.getElementById('scheduleDetailsInput');
+        // Log toggle (basic)
+        const toggleLogBtn = document.getElementById('toggleLogBtn');
+        const logContainer = document.getElementById('logContainer');
+
+        let scheduleEnabled = false;
 
         // Function to fetch tasks and render them
         async function fetchAndRenderTasks() {
@@ -67,30 +177,91 @@
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
                 const tasks = await response.json();
-                renderTasks(tasks);
+                renderTasksList(tasks);
             } catch (error) {
                 console.error('Error fetching tasks:', error);
-                tasksList.innerHTML = '<li>Error loading tasks.</li>';
+                tasksListElement.innerHTML = '<p>Error loading tasks.</p>';
             }
         }
 
-        // Function to render tasks in the list
-        function renderTasks(tasks) {
-            tasksList.innerHTML = ''; // Clear existing tasks
+        // Function to render tasks in the list (simplified for now)
+        function renderTasksList(tasks) {
+            tasksListElement.innerHTML = ''; // Clear existing tasks
             if (tasks.length === 0) {
-                tasksList.innerHTML = '<li>No tasks yet.</li>';
+                tasksListElement.innerHTML = '<p>No tasks yet. Add one using the form above.</p>';
                 return;
             }
             tasks.forEach(task => {
-                const listItem = document.createElement('li');
-                listItem.textContent = `${task.name} (ID: ${task.id})`;
-                // We can add edit/delete buttons here later
-                tasksList.appendChild(listItem);
+                const taskItem = document.createElement('div');
+                taskItem.className = 'task-item';
+                taskItem.innerHTML = `
+                    <span>${task.name}</span>
+                    <div>
+                        <!-- Edit button will load task into form later -->
+                        <button class="btn btn-sm btn-primary edit-task" data-id="${task.id}" style="margin-right: 5px;">Edit</button>
+                        <button class="btn btn-sm btn-danger delete-task" data-id="${task.id}">Delete</button>
+                    </div>
+                `;
+                // Add event listeners for delete/edit here later
+                tasksListElement.appendChild(taskItem);
             });
         }
+        
+        function createPathPairElement() {
+            const div = document.createElement('div');
+            div.className = 'path-pair';
+            div.innerHTML = `
+                <input type="text" class="source-path" placeholder="Source Path">
+                <span class="arrow">&rarr;</span>
+                <input type="text" class="destination-path" placeholder="Destination Path">
+                <button type="button" class="btn btn-danger remove-path">&times;</button>
+            `;
+            div.querySelector('.remove-path').addEventListener('click', () => {
+                // Only remove if more than one path pair exists
+                if (pathPairsContainer.querySelectorAll('.path-pair').length > 1) {
+                    div.remove();
+                } else {
+                    alert("At least one path pair is required.");
+                }
+            });
+            return div;
+        }
 
-        // Function to handle adding a new task
-        async function handleAddTask(event) {
+        addPathPairButton.addEventListener('click', () => {
+            pathPairsContainer.appendChild(createPathPairElement());
+            // Show remove button on all path pairs if more than one exists
+            const allPathPairs = pathPairsContainer.querySelectorAll('.path-pair');
+            allPathPairs.forEach(pp => {
+                 pp.querySelector('.remove-path').style.display = allPathPairs.length > 1 ? 'inline-block' : 'none';
+            });
+        });
+        
+        // Initial path pair - ensure its remove button is hidden if it's the only one
+        pathPairsContainer.querySelector('.remove-path').style.display = 'none';
+
+
+        scheduleOnBtn.addEventListener('click', () => {
+            scheduleEnabled = true;
+            scheduleOnBtn.classList.add('active');
+            scheduleOffBtn.classList.remove('active');
+            scheduleDetailsContainer.style.display = 'block';
+        });
+
+        scheduleOffBtn.addEventListener('click', () => {
+            scheduleEnabled = false;
+            scheduleOffBtn.classList.add('active');
+            scheduleOnBtn.classList.remove('active');
+            scheduleDetailsContainer.style.display = 'none';
+        });
+
+        toggleLogBtn.addEventListener('click', () => {
+            const isHidden = logContainer.style.display === 'none';
+            logContainer.style.display = isHidden ? 'block' : 'none';
+            toggleLogBtn.textContent = isHidden ? '-' : '+';
+        });
+
+        // Function to handle adding/updating a task
+        async function handleSaveTask(event) {
             event.preventDefault();
             const taskName = taskNameInput.value.trim();
             if (!taskName) {
@@ -98,13 +269,43 @@
                 return;
             }
 
+            const paths = [];
+            pathPairsContainer.querySelectorAll('.path-pair').forEach(pair => {
+                const source = pair.querySelector('.source-path').value.trim();
+                const destination = pair.querySelector('.destination-path').value.trim();
+                if (source && destination) {
+                    paths.push({ source, destination });
+                }
+            });
+
+            if (paths.length === 0) {
+                alert('At least one valid source/destination path pair is required.');
+                return;
+            }
+
+            const flagsRaw = taskFlagsTextarea.value.trim();
+            // Split flags by space, respecting quotes later if needed
+            const flags = flagsRaw ? flagsRaw.split(/\s+/) : [];
+
+
+            const taskData = {
+                name: taskName,
+                sourceHost: sourceHostSelect.value,
+                destinationHost: destinationHostSelect.value,
+                paths: paths,
+                flags: flags,
+                scheduleEnabled: scheduleEnabled,
+                scheduleDetails: scheduleEnabled ? scheduleDetailsInput.value.trim() : undefined,
+            };
+
             try {
+                // For now, always POST. Update logic will come later.
                 const response = await fetch('/api/tasks', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ name: taskName }),
+                    body: JSON.stringify(taskData),
                 });
 
                 if (!response.ok) {
@@ -112,20 +313,33 @@
                     throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
                 }
                 
-                // const newTask = await response.json(); // newTask is returned by API
-                taskNameInput.value = ''; // Clear input
+                taskForm.reset(); // Reset form fields
+                // Reset path pairs to one empty
+                pathPairsContainer.innerHTML = '';
+                pathPairsContainer.appendChild(createPathPairElement());
+                pathPairsContainer.querySelector('.remove-path').style.display = 'none';
+
+                // Reset schedule
+                scheduleOffBtn.click(); 
                 fetchAndRenderTasks(); // Refresh the tasks list
             } catch (error) {
-                console.error('Error adding task:', error);
-                alert(`Error adding task: ${error.message}`);
+                console.error('Error saving task:', error);
+                alert(`Error saving task: ${error.message}`);
             }
         }
 
         // Event listeners
-        addTaskForm.addEventListener('submit', handleAddTask);
+        taskForm.addEventListener('submit', handleSaveTask);
 
         // Initial load of tasks
-        document.addEventListener('DOMContentLoaded', fetchAndRenderTasks);
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchAndRenderTasks();
+            // Ensure the first path pair's remove button is hidden
+            const firstPathPair = pathPairsContainer.querySelector('.path-pair .remove-path');
+            if (firstPathPair) {
+                firstPathPair.style.display = 'none';
+            }
+        });
     </script>
 </body>
 </html>

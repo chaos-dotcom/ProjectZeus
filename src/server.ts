@@ -11,10 +11,21 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // --- Task Management ---
+interface PathPair {
+  source: string;
+  destination: string;
+}
+
 interface Task {
   id: string;
   name: string;
-  // We will add more properties like source, destination, schedule, flags later
+  sourceHost: string;
+  destinationHost: string;
+  paths: PathPair[];
+  flags: string[]; // Store flags as an array of strings
+  scheduleEnabled: boolean;
+  scheduleDetails?: string; // e.g., cron string or simple description
+  // Add other fields like lastRun, status, etc. later
 }
 
 let tasks: Task[] = []; // In-memory store for tasks
@@ -26,13 +37,41 @@ app.get('/api/tasks', (req, res) => {
 
 // POST a new task
 app.post('/api/tasks', (req, res) => {
-  const { name } = req.body;
+  const {
+    name,
+    sourceHost,
+    destinationHost,
+    paths,
+    flags,
+    scheduleEnabled,
+    scheduleDetails,
+  } = req.body;
+
   if (!name) {
     return res.status(400).json({ message: 'Task name is required' });
   }
+  if (!sourceHost || !destinationHost) {
+    return res.status(400).json({ message: 'Source and Destination hosts are required' });
+  }
+  if (!paths || !Array.isArray(paths) || paths.length === 0) {
+    return res.status(400).json({ message: 'At least one source/destination path pair is required' });
+  }
+  // Basic validation for paths
+  for (const p of paths) {
+    if (typeof p.source !== 'string' || typeof p.destination !== 'string') {
+      return res.status(400).json({ message: 'Each path pair must have a source and a destination string.' });
+    }
+  }
+
   const newTask: Task = {
     id: Date.now().toString(), // Simple ID generation
     name,
+    sourceHost,
+    destinationHost,
+    paths,
+    flags: flags || [],
+    scheduleEnabled: !!scheduleEnabled,
+    scheduleDetails: scheduleEnabled ? scheduleDetails : undefined,
   };
   tasks.push(newTask);
   res.status(201).json(newTask);
