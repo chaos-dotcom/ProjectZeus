@@ -34,8 +34,98 @@
             <li>Secure Web Interface</li>
         </ul>
     </div>
+
+    <div class="container" id="tasks-section">
+        <h2>Tasks</h2>
+        <form id="addTaskForm">
+            <div>
+                <label for="taskName">Task Name:</label>
+                <input type="text" id="taskName" name="taskName" required>
+            </div>
+            <button type="submit">Add Task</button>
+        </form>
+        <h3>Current Tasks:</h3>
+        <ul id="tasksList">
+            <!-- Tasks will be listed here -->
+        </ul>
+    </div>
+
     <footer>
         <p style="text-align:center; margin-top: 20px;">&copy; 2025 WebSync TS</p>
     </footer>
+
+    <script>
+        const tasksList = document.getElementById('tasksList');
+        const addTaskForm = document.getElementById('addTaskForm');
+        const taskNameInput = document.getElementById('taskName');
+
+        // Function to fetch tasks and render them
+        async function fetchAndRenderTasks() {
+            try {
+                const response = await fetch('/api/tasks');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const tasks = await response.json();
+                renderTasks(tasks);
+            } catch (error) {
+                console.error('Error fetching tasks:', error);
+                tasksList.innerHTML = '<li>Error loading tasks.</li>';
+            }
+        }
+
+        // Function to render tasks in the list
+        function renderTasks(tasks) {
+            tasksList.innerHTML = ''; // Clear existing tasks
+            if (tasks.length === 0) {
+                tasksList.innerHTML = '<li>No tasks yet.</li>';
+                return;
+            }
+            tasks.forEach(task => {
+                const listItem = document.createElement('li');
+                listItem.textContent = `${task.name} (ID: ${task.id})`;
+                // We can add edit/delete buttons here later
+                tasksList.appendChild(listItem);
+            });
+        }
+
+        // Function to handle adding a new task
+        async function handleAddTask(event) {
+            event.preventDefault();
+            const taskName = taskNameInput.value.trim();
+            if (!taskName) {
+                alert('Task name cannot be empty.');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/tasks', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ name: taskName }),
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+                }
+                
+                // const newTask = await response.json(); // newTask is returned by API
+                taskNameInput.value = ''; // Clear input
+                fetchAndRenderTasks(); // Refresh the tasks list
+            } catch (error) {
+                console.error('Error adding task:', error);
+                alert(`Error adding task: ${error.message}`);
+            }
+        }
+
+        // Event listeners
+        addTaskForm.addEventListener('submit', handleAddTask);
+
+        // Initial load of tasks
+        document.addEventListener('DOMContentLoaded', fetchAndRenderTasks);
+    </script>
 </body>
 </html>
