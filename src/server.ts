@@ -863,7 +863,12 @@ async function executeRsyncCommand(task: Task, pathPair: PathPair, hostsList: Ho
       }
       // --- End ensure exclude file exists ---
 
+      // Add the exclude-from flag and also add verbose output so we can parse transferred files
       finalFlags.push(`--exclude-from='${excludeFilePathOnSource.replace(/'/g, "'\\''")}'`);
+      // Add verbose flag if not already present to help with parsing output
+      if (!finalFlags.includes('-v') && !finalFlags.includes('--verbose')) {
+        finalFlags.push('-v');
+      }
       console.log(`[Rsync Exec] ADDED --exclude-from='${excludeFilePathOnSource}' to flags for task ${task.id}`); // DEBUG
     } else {
       console.log(`[Rsync Exec] DID NOT add --exclude-from for task ${task.id}. Conditions: type=${automationConfig?.type}, processedLogFile=${automationConfig?.processedLogFile}, scanPath=${automationConfig?.scanDirectoryPath}`); // DEBUG
@@ -911,17 +916,57 @@ async function executeRsyncCommand(task: Task, pathPair: PathPair, hostsList: Ho
 
             if (automationConfig && sourceHostObj && automationConfig.type === 'turbosort' && automationConfig.processedLogFile && task.triggerFilePath) {
               try {
-                // pathPair.source is the absolute path to the project folder on source, e.g., /scan/path/projectA/
-                // We need the name of the folder that pathPair.source points to.
-                let projectFolderName = path.basename(pathPair.source.endsWith('/') ? pathPair.source.slice(0, -1) : pathPair.source);
+                // Get the list of files that were transferred in this rsync operation
+                // We'll parse the stdout to get the list of files
+                const transferredFiles: string[] = [];
                 
-                const processedEntry = `${projectFolderName}/\n`; // Add trailing slash for directory pattern and newline
-                // Construct the exclude file path on the source host.
-                // It's assumed to be relative to the scanDirectoryPath if not absolute.
-                // For simplicity, placing it inside scanDirectoryPath.
+                // Parse rsync output to extract transferred file paths
+                // rsync output format varies based on flags, but we can look for common patterns
+                const lines = stdout.split('\n');
+                for (const line of lines) {
+                  // Skip empty lines and summary lines
+                  if (!line.trim() || line.includes('sent ') || line.includes('total size')) continue;
+                  
+                  // Extract the file path - this may need adjustment based on your rsync flags
+                  // This assumes default output format or -v flag
+                  const match = line.trim().match(/^[<>ch.+*] (.+)$/);
+                  if (match && match[1]) {
+                    transferredFiles.push(match[1]);
+                  }
+                }
+                
+                // If we couldn't parse any files from stdout, log a warning but don't fail
+                if (transferredFiles.length === 0) {
+                  console.log(`[Rsync Exec] Warning: Could not parse transferred files from rsync output for task ${task.name}`);
+                  console.log(`[Rsync Exec] Rsync stdout: ${stdout}`);
+                }
+                
+                // Construct the exclude file path on the source host
                 const excludeFilePathOnSource = path.join(automationConfig.scanDirectoryPath, automationConfig.processedLogFile);
                 
-                const appendCommand = `echo '${processedEntry.replace(/'/g, "'\\''")}' >> '${excludeFilePathOnSource.replace(/'/g, "'\\''")}'`;
+                // Create a command to append each transferred file to the exclude file
+                let appendEntries = '';
+                for (const file of transferredFiles) {
+                  // Get the relative path from the source directory
+                  let relativePath = file;
+                  if (file.startsWith(pathPair.source)) {
+                    relativePath = file.substring(pathPair.source.length);
+                  }
+                  // Skip empty paths
+                  if (!relativePath.trim()) continue;
+                  
+                  // Add the file to our append string
+                  appendEntries += `${relativePath}\n`;
+                }
+                
+                // If we have files to append, create the command
+                let appendCommand = '';
+                if (appendEntries) {
+                  appendCommand = `echo '${appendEntries.replace(/'/g, "'\\''")}' >> '${excludeFilePathOnSource.replace(/'/g, "'\\''")}'`;
+                } else {
+                  console.log(`[Rsync Exec] No files to append to exclude list for task ${task.name}`);
+                  return; // Skip if no files to append
+                }
                 let commandToRunOnSourceHost = appendCommand;
                 // privateKeyPath is already defined in the outer scope of executeRsyncCommand
 
