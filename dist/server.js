@@ -14,17 +14,251 @@ const port = process.env.PORT || 3000;
 app.use(express_1.default.json());
 // Serve static files from the 'public' directory
 app.use(express_1.default.static(path_1.default.join(__dirname, '..', 'public')));
-let tasks = []; // In-memory store for tasks
-let hosts = [
-    // Add a default localhost entry for convenience in tasks
-    { id: 'localhost', alias: 'Localhost', user: '', hostname: 'localhost' }
-]; // In-memory store for hosts
+let tasks = []; // Will be populated by loadData
+let automationConfigs = []; // Will be populated by loadData
+// --- Data Persistence ---
+const DATA_FILE_PATH = path_1.default.join(__dirname, '..', 'websync-data.json');
+async function saveData() {
+    try {
+        const dataToSave = { hosts, tasks, automationConfigs };
+        await fs_1.default.promises.writeFile(DATA_FILE_PATH, JSON.stringify(dataToSave, null, 2), 'utf-8');
+        // console.log('Data saved to file.'); // Optional: for debugging
+    }
+    catch (error) {
+        console.error('Error saving data to file:', error);
+    }
+}
+async function loadData() {
+    let loadedHosts = [];
+    let loadedTasks = [];
+    let loadedAutomationConfigs = [];
+    try {
+        if (fs_1.default.existsSync(DATA_FILE_PATH)) {
+            const fileContent = await fs_1.default.promises.readFile(DATA_FILE_PATH, 'utf-8');
+            const parsedData = JSON.parse(fileContent);
+            loadedHosts = parsedData.hosts || [];
+            loadedTasks = parsedData.tasks || [];
+            loadedAutomationConfigs = parsedData.automationConfigs || [];
+        }
+    }
+    catch (error) {
+        console.error('Error reading or parsing data file. Initializing with empty/default data.', error);
+    }
+    // Ensure 'localhost' is always present and at the beginning.
+    // Its alias can be persisted, but core properties are fixed.
+    const defaultLocalhostAlias = 'Localhost';
+    const localhostFromFile = loadedHosts.find(h => h.id === 'localhost');
+    const currentLocalhostAlias = localhostFromFile ? localhostFromFile.alias : defaultLocalhostAlias;
+    const localhostEntry = { id: 'localhost', alias: currentLocalhostAlias, user: '', hostname: 'localhost' };
+    // Filter out any existing localhost entries from loadedHosts to avoid duplicates, then prepend our controlled one.
+    hosts = [localhostEntry, ...loadedHosts.filter(h => h.id !== 'localhost')];
+    tasks = loadedTasks;
+    automationConfigs = loadedAutomationConfigs;
+    // If the file didn't exist initially or was unparsable and resulted in empty data structures, save initial state.
+    if (!fs_1.default.existsSync(DATA_FILE_PATH) ||
+        ((loadedHosts.length === 0 && !localhostFromFile) && loadedTasks.length === 0 && loadedAutomationConfigs.length === 0)) {
+        await saveData();
+    }
+}
+// --- Scanner Functionality ---
+// Helper function for recursive local directory scanning
+async function getFilesInDirectoryLocalRecursive(dirPath, fileExtensions) {
+    let files = [];
+    try {
+        const entries = await fs_1.default.promises.readdir(dirPath, { withFileTypes: true });
+        for (const entry of entries) {
+            const fullPath = path_1.default.join(dirPath, entry.name);
+            if (entry.isDirectory()) {
+                files = files.concat(await getFilesInDirectoryLocalRecursive(fullPath, fileExtensions));
+            }
+            else if (entry.isFile() && fileExtensions.some(ext => entry.name.endsWith(ext))) {
+                files.push(fullPath);
+            }
+        }
+    }
+    catch (error) {
+        // Log errors for specific subdirectories but continue scanning others if possible
+        console.warn(`Warning: Could not read directory ${dirPath}: ${error.message}`);
+    }
+    return files;
+}
+async function scanDirectoryOnHost(host, directoryPath) {
+    const privateKeyPath = path_1.default.join(os_1.default.homedir(), '.ssh', 'websync_id_rsa');
+    if (!fs_1.default.existsSync(privateKeyPath)) {
+        // Attempt to generate keys if websync_id_rsa doesn't exist.
+        // This is primarily for the ssh-copy-id feature, but good to check here too.
+        // If this fails, SSH operations will likely fail.
+        console.warn(`SSH private key ${privateKeyPath} not found. SSH operations might fail if keys are not set up.`);
+        // Optionally, trigger key generation here if desired, similar to ssh-copy-id,
+        // but for scanning, we might assume keys should already be functional.
+    }
+    if (host.id === 'localhost') {
+        try {
+            return await getFilesInDirectoryLocalRecursive(directoryPath, ['.livework', '.turbosort']);
+        }
+        catch (error) {
+            // This top-level catch is for errors that prevent starting the scan at all (e.g., root path doesn't exist)
+            console.error(`Error starting local recursive scan for directory ${directoryPath}:`, error);
+            throw new Error(`Failed to scan local directory ${directoryPath} recursively: ${error.message}`);
+        }
+    }
+    else {
+        // Remote host: Use SSH to execute 'find' (recursively by default)
+        // Ensure directoryPath is properly escaped for the remote shell.
+        // Using single quotes around directoryPath for the remote find command.
+        const escapedDirectoryPath = directoryPath.replace(/'/g, "'\\''"); // Basic escaping for single quotes
+        // Removed -maxdepth 1 to make the find command recursive
+        const findCommand = `find '${escapedDirectoryPath}' -type f \\( -name '*.livework' -o -name '*.turbosort' \\)`;
+        const portOption = host.port ? `-p ${host.port}` : '';
+        // BatchMode=yes ensures ssh doesn't hang asking for a password if key auth fails
+        const sshCommand = `ssh -i "${privateKeyPath}" -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${portOption} ${host.user}@${host.hostname} "${findCommand}"`;
+        console.log(`Executing remote scan: ${sshCommand}`); // For debugging
+        return new Promise((resolve, reject) => {
+            (0, child_process_1.exec)(sshCommand, (error, stdout, stderr) => {
+                if (error) {
+                    console.error(`Remote scan exec error for ${host.alias} on path ${directoryPath}: ${stderr || error.message}`);
+                    return reject(new Error(`Failed to scan directory on ${host.alias}. SSH command failed. ${stderr || error.message}`));
+                }
+                const foundFiles = stdout.trim().split('\n').filter(line => line.length > 0);
+                resolve(foundFiles);
+            });
+        });
+    }
+}
+app.post('/api/hosts/:hostId/scan-directory', async (req, res) => {
+    const { hostId } = req.params;
+    const { directoryPath } = req.body;
+    if (!directoryPath) {
+        return res.status(400).json({ message: 'directoryPath is required in the request body.' });
+    }
+    const host = hosts.find(h => h.id === hostId);
+    if (!host) {
+        return res.status(404).json({ message: 'Host not found.' });
+    }
+    try {
+        const files = await scanDirectoryOnHost(host, directoryPath);
+        res.json(files);
+    }
+    catch (error) {
+        console.error(`Error in scan-directory endpoint for host ${hostId}, path ${directoryPath}:`, error);
+        res.status(500).json({ message: error.message || 'An unexpected error occurred during directory scan.' });
+    }
+});
+async function listDirectoryContents(host, directoryPath) {
+    const privateKeyPath = path_1.default.join(os_1.default.homedir(), '.ssh', 'websync_id_rsa');
+    // No need to check for key existence here again, as scanDirectoryOnHost and ssh-copy-id handle it.
+    // Assume if we reach here for a remote host, key setup is expected.
+    if (host.id === 'localhost') {
+        try {
+            const entries = await fs_1.default.promises.readdir(directoryPath, { withFileTypes: true });
+            return entries.map(entry => {
+                let type = 'other';
+                if (entry.isFile())
+                    type = 'file';
+                else if (entry.isDirectory())
+                    type = 'directory';
+                return { name: entry.name, type, path: path_1.default.join(directoryPath, entry.name) };
+            });
+        }
+        catch (error) {
+            console.error(`Error listing local directory ${directoryPath}:`, error);
+            throw new Error(`Failed to list local directory ${directoryPath}: ${error.message}`);
+        }
+    }
+    else {
+        // Remote host: Use SSH to execute 'ls -Ap1 -- "<directoryPath>"'
+        // The '--' ensures that if directoryPath starts with a '-', it's not treated as an option.
+        const escapedDirectoryPath = directoryPath.replace(/'/g, "'\\''"); // Basic escaping for single quotes
+        const listCommand = `ls -Ap1 -- '${escapedDirectoryPath}'`;
+        const portOption = host.port ? `-p ${host.port}` : '';
+        const sshCommand = `ssh -i "${privateKeyPath}" -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${portOption} ${host.user}@${host.hostname} "${listCommand}"`;
+        console.log(`Executing remote directory list: ${sshCommand.split(' ')[0]} ...`); // Log only ssh part for brevity
+        return new Promise((resolve, reject) => {
+            (0, child_process_1.exec)(sshCommand, (error, stdout, stderr) => {
+                if (error) {
+                    console.error(`Remote directory list exec error for ${host.alias} on path ${directoryPath}: ${stderr || error.message}`);
+                    return reject(new Error(`Failed to list directory on ${host.alias}. SSH command failed. ${stderr || error.message}`));
+                }
+                const lines = stdout.trim().split('\n').filter(line => line.length > 0);
+                const directoryEntries = lines.map(line => {
+                    const isDir = line.endsWith('/');
+                    const name = isDir ? line.slice(0, -1) : line;
+                    // Construct full path. Note: path.join might not be correct for remote paths if they use different separators.
+                    // For simplicity, assuming Unix-like remote paths.
+                    const entryPath = (directoryPath.endsWith('/') ? directoryPath : directoryPath + '/') + name;
+                    return {
+                        name,
+                        type: isDir ? 'directory' : 'file',
+                        path: entryPath
+                    };
+                });
+                resolve(directoryEntries);
+            });
+        });
+    }
+}
+app.post('/api/hosts/:hostId/list-directory-contents', async (req, res) => {
+    const { hostId } = req.params;
+    const { directoryPath } = req.body;
+    if (!directoryPath) {
+        return res.status(400).json({ message: 'directoryPath is required in the request body.' });
+    }
+    const host = hosts.find(h => h.id === hostId);
+    if (!host) {
+        return res.status(404).json({ message: 'Host not found.' });
+    }
+    try {
+        const entries = await listDirectoryContents(host, directoryPath);
+        res.json(entries);
+    }
+    catch (error) {
+        console.error(`Error in list-directory-contents endpoint for host ${hostId}, path ${directoryPath}:`, error);
+        res.status(500).json({ message: error.message || 'An unexpected error occurred during directory listing.' });
+    }
+});
+// --- Automation Config API Endpoints ---
+app.get('/api/automation-configs', (req, res) => {
+    res.json(automationConfigs);
+});
+app.post('/api/automation-configs', async (req, res) => {
+    const { name, type, hostId, directoryPath } = req.body;
+    if (!name || !type || !hostId || !directoryPath) {
+        return res.status(400).json({ message: 'Name, type, hostId, and directoryPath are required.' });
+    }
+    if (type !== 'livework' && type !== 'turbosort') {
+        return res.status(400).json({ message: 'Invalid type. Must be "livework" or "turbosort".' });
+    }
+    if (!hosts.find(h => h.id === hostId)) {
+        return res.status(400).json({ message: 'HostId does not refer to a valid host.' });
+    }
+    const newConfig = {
+        id: Date.now().toString(),
+        name,
+        type,
+        hostId,
+        directoryPath,
+    };
+    automationConfigs.push(newConfig);
+    await saveData();
+    res.status(201).json(newConfig);
+});
+app.delete('/api/automation-configs/:id', async (req, res) => {
+    const { id } = req.params;
+    const configIndex = automationConfigs.findIndex(ac => ac.id === id);
+    if (configIndex === -1) {
+        return res.status(404).json({ message: 'Automation configuration not found.' });
+    }
+    automationConfigs.splice(configIndex, 1);
+    await saveData();
+    res.status(204).send();
+});
+let hosts = []; // Will be populated by loadData
 // GET all hosts
 app.get('/api/hosts', (req, res) => {
     res.json(hosts);
 });
 // POST a new host
-app.post('/api/hosts', (req, res) => {
+app.post('/api/hosts', async (req, res) => {
     const { alias, user, hostname, port } = req.body;
     if (!alias || !user || !hostname) {
         return res.status(400).json({ message: 'Alias, User, and Hostname are required' });
@@ -40,10 +274,11 @@ app.post('/api/hosts', (req, res) => {
         port: port ? parseInt(port, 10) : undefined,
     };
     hosts.push(newHost);
+    await saveData();
     res.status(201).json(newHost);
 });
 // PUT (update) an existing host
-app.put('/api/hosts/:id', (req, res) => {
+app.put('/api/hosts/:id', async (req, res) => {
     const { id } = req.params;
     const { alias, user, hostname, port } = req.body;
     if (id === 'localhost' && (req.body.user || req.body.hostname || req.body.port)) {
@@ -78,10 +313,11 @@ app.put('/api/hosts/:id', (req, res) => {
         if (alias)
             hosts[hostIndex].alias = alias;
     }
+    await saveData();
     res.json(hosts[hostIndex]);
 });
 // DELETE a host
-app.delete('/api/hosts/:id', (req, res) => {
+app.delete('/api/hosts/:id', async (req, res) => {
     const { id } = req.params;
     // Prevent deleting the default 'localhost' entry if it's special
     if (id === 'localhost') {
@@ -92,6 +328,7 @@ app.delete('/api/hosts/:id', (req, res) => {
         return res.status(404).json({ message: 'Host not found' });
     }
     hosts.splice(hostIndex, 1);
+    await saveData();
     res.status(204).send(); // No content
 });
 // SSH Key Copy ID
@@ -157,7 +394,7 @@ app.get('/api/tasks', (req, res) => {
     res.json(tasks);
 });
 // POST a new task
-app.post('/api/tasks', (req, res) => {
+app.post('/api/tasks', async (req, res) => {
     const { name, sourceHost, destinationHost, paths, flags, scheduleEnabled, scheduleDetails, } = req.body;
     if (!name) {
         return res.status(400).json({ message: 'Task name is required' });
@@ -185,6 +422,7 @@ app.post('/api/tasks', (req, res) => {
         scheduleDetails: scheduleEnabled ? scheduleDetails : undefined,
     };
     tasks.push(newTask);
+    await saveData();
     res.status(201).json(newTask);
 });
 // A simple API endpoint example
@@ -195,6 +433,10 @@ app.get('/api/hello', (req, res) => {
 app.get('*', (req, res) => {
     res.sendFile(path_1.default.join(__dirname, '..', 'public', 'index.html'));
 });
-app.listen(port, () => {
-    console.log(`WebSync TS server listening at http://localhost:${port}`);
-});
+async function startServer() {
+    await loadData();
+    app.listen(port, () => {
+        console.log(`WebSync TS server listening at http://localhost:${port}`);
+    });
+}
+startServer();
