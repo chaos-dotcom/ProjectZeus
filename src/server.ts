@@ -115,11 +115,12 @@ app.post('/api/hosts', async (req, res) => {
     port: port ? parseInt(port, 10) : undefined,
   };
   hosts.push(newHost);
+  await saveData();
   res.status(201).json(newHost);
 });
 
 // PUT (update) an existing host
-app.put('/api/hosts/:id', (req, res) => {
+app.put('/api/hosts/:id', async (req, res) => {
   const { id } = req.params;
   const { alias, user, hostname, port } = req.body;
 
