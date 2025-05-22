@@ -79,6 +79,78 @@ async function loadData(): Promise<void> {
   }
 }
 
+// --- Scanner Functionality ---
+async function scanDirectoryOnHost(host: Host, directoryPath: string): Promise<string[]> {
+  const privateKeyPath = path.join(os.homedir(), '.ssh', 'websync_id_rsa');
+  if (!fs.existsSync(privateKeyPath)) {
+    // Attempt to generate keys if websync_id_rsa doesn't exist.
+    // This is primarily for the ssh-copy-id feature, but good to check here too.
+    // If this fails, SSH operations will likely fail.
+    console.warn(`SSH private key ${privateKeyPath} not found. SSH operations might fail if keys are not set up.`);
+    // Optionally, trigger key generation here if desired, similar to ssh-copy-id,
+    // but for scanning, we might assume keys should already be functional.
+  }
+
+
+  if (host.id === 'localhost') {
+    try {
+      const entries = await fs.promises.readdir(directoryPath, { withFileTypes: true });
+      const files = entries
+        .filter(entry => entry.isFile() && (entry.name.endsWith('.livework') || entry.name.endsWith('.turbosort')))
+        .map(entry => path.join(directoryPath, entry.name));
+      return files;
+    } catch (error: any) {
+      console.error(`Error scanning local directory ${directoryPath}:`, error);
+      throw new Error(`Failed to scan local directory ${directoryPath}: ${error.message}`);
+    }
+  } else {
+    // Remote host: Use SSH to execute 'find'
+    // Ensure directoryPath is properly escaped for the remote shell.
+    // Using single quotes around directoryPath for the remote find command.
+    const escapedDirectoryPath = directoryPath.replace(/'/g, "'\\''"); // Basic escaping for single quotes
+
+    const findCommand = `find '${escapedDirectoryPath}' -maxdepth 1 -type f \\( -name '*.livework' -o -name '*.turbosort' \\)`;
+    const portOption = host.port ? `-p ${host.port}` : '';
+    // BatchMode=yes ensures ssh doesn't hang asking for a password if key auth fails
+    const sshCommand = `ssh -i "${privateKeyPath}" -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${portOption} ${host.user}@${host.hostname} "${findCommand}"`;
+
+    console.log(`Executing remote scan: ${sshCommand}`); // For debugging
+
+    return new Promise<string[]>((resolve, reject) => {
+      exec(sshCommand, (error, stdout, stderr) => {
+        if (error) {
+          console.error(`Remote scan exec error for ${host.alias} on path ${directoryPath}: ${stderr || error.message}`);
+          return reject(new Error(`Failed to scan directory on ${host.alias}. SSH command failed. ${stderr || error.message}`));
+        }
+        const foundFiles = stdout.trim().split('\n').filter(line => line.length > 0);
+        resolve(foundFiles);
+      });
+    });
+  }
+}
+
+app.post('/api/hosts/:hostId/scan-directory', async (req, res) => {
+  const { hostId } = req.params;
+  const { directoryPath } = req.body;
+
+  if (!directoryPath) {
+    return res.status(400).json({ message: 'directoryPath is required in the request body.' });
+  }
+
+  const host = hosts.find(h => h.id === hostId);
+  if (!host) {
+    return res.status(404).json({ message: 'Host not found.' });
+  }
+
+  try {
+    const files = await scanDirectoryOnHost(host, directoryPath);
+    res.json(files);
+  } catch (error: any) {
+    console.error(`Error in scan-directory endpoint for host ${hostId}, path ${directoryPath}:`, error);
+    res.status(500).json({ message: error.message || 'An unexpected error occurred during directory scan.' });
+  }
+});
+
 
 // --- Host Management ---
 interface Host {
