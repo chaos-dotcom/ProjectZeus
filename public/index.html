@@ -8,7 +8,20 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <style>
         body { font-family: sans-serif; margin: 20px; background-color: #f4f4f4; color: #333; }
-        header { background-color: #333; color: #fff; padding: 1em 0; text-align: center; }
+        header { 
+            background-color: #333; 
+            color: #fff; 
+            padding: 1em 0; 
+            text-align: center; 
+            position: relative; /* For positioning the GIF */
+        }
+        header img.header-gif {
+            position: absolute;
+            top: 10px; /* Adjust as needed */
+            left: 10px; /* Adjust as needed */
+            height: 40px; /* Adjust as needed */
+            width: auto;
+        }
         nav a { color: #fff; margin: 0 15px; text-decoration: none; cursor: pointer; }
         nav a.active-nav-link { font-weight: bold; border-bottom: 2px solid #fff; }
         .container { max-width: 960px; margin: 20px auto; padding: 20px; background-color: #fff; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
@@ -222,6 +235,7 @@
 </head>
 <body>
     <header>
+        <img src="/projectzeus.gif" alt="Project Zeus Logo" class="header-gif">
         <div id="messageBanner" class="message-banner" style="display:none;"></div>
         <h1>Project Zeus</h1>
         <nav>
