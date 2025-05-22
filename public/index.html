@@ -924,15 +924,21 @@
                                 const pathsMatch = t.paths && t.paths.length > 0 &&
                                                  t.paths[0].source === jobDetail.sourcePath &&
                                                  t.paths[0].destination === jobDetail.destinationPath;
+                                // Corrected comparison:
+                                // Task object 't' has 'sourceHost' and 'destinationHost' for IDs.
+                                // jobDetail object has 'sourceHostId' and 'destinationHostId'.
                                 const isMatch = t.triggerFilePath === jobDetail.triggerFilePath &&
-                                      t.destinationHostId === jobDetail.destinationHostId &&
+                                      t.sourceHost === jobDetail.sourceHostId &&         // Check source host
+                                      t.destinationHost === jobDetail.destinationHostId && // Check destination host
                                       pathsMatch;
                                 
                                 if (isMatch) {
                                     console.log("[Automation] Found matching existingTask:", JSON.parse(JSON.stringify(t)));
-                                } else if (t.triggerFilePath === jobDetail.triggerFilePath && t.destinationHostId === jobDetail.destinationHostId) {
-                                    // Log details if trigger and destination host match but paths don't, to see the difference
-                                    console.log("[Automation] Partial match (trigger & dest host) but paths differ or missing:");
+                                } else if (t.triggerFilePath === jobDetail.triggerFilePath && 
+                                           t.sourceHost === jobDetail.sourceHostId && 
+                                           t.destinationHost === jobDetail.destinationHostId) {
+                                    // Log details if trigger, source host, and destination host match but paths don't
+                                    console.log("[Automation] Partial match (trigger, source & dest host) but paths differ or missing:");
                                     console.log("[Automation] Existing Task Path[0]:", t.paths ? JSON.parse(JSON.stringify(t.paths[0])) : "undefined/empty");
                                     console.log("[Automation] JobDetail sourcePath:", jobDetail.sourcePath);
                                     console.log("[Automation] JobDetail destinationPath:", jobDetail.destinationPath);
