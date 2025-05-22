@@ -822,17 +822,22 @@ async function executeRsyncCommand(task: Task, pathPair: PathPair, hostsList: Ho
   // Check if this task is from a .turbosort automation and needs an exclude file
   if (task.automationConfigId) {
     const automationConfig = automationConfigs.find(ac => ac.id === task.automationConfigId);
+    
+    // --- SERVER-SIDE DEBUGGING for --exclude-from ---
+    console.log(`[Rsync Exec] Task ID: ${task.id}, AutomationConfigID: ${task.automationConfigId}`);
+    if (automationConfig) {
+      console.log(`[Rsync Exec] Found AutomationConfig: ID=${automationConfig.id}, Type=${automationConfig.type}, ProcessedLogFile=${automationConfig.processedLogFile}, ScanPath=${automationConfig.scanDirectoryPath}`);
+    } else {
+      console.log(`[Rsync Exec] No AutomationConfig found for ID: ${task.automationConfigId}`);
+    }
+    // --- END SERVER-SIDE DEBUGGING ---
+
     if (automationConfig && automationConfig.type === 'turbosort' && automationConfig.processedLogFile && automationConfig.scanDirectoryPath) {
-      // The processedLogFile path must be absolute on the source host, or relative to where rsync is invoked from (user's home dir for remote).
-      // For simplicity, let's assume it's in the scanDirectoryPath.
-      // Rsync needs the path to the exclude file as seen by the source side of the transfer.
       let excludeFilePathOnSource = path.join(automationConfig.scanDirectoryPath, automationConfig.processedLogFile);
-      // If source is remote, this path is already correct for the remote machine.
-      // If source is localhost, this is a local path.
-      
-      // Ensure path separators are correct for the source host if it's remote and not Unix-like (though we assume Unix-like for SSH)
-      // For now, path.join should be fine for Unix-like systems.
       finalFlags.push(`--exclude-from='${excludeFilePathOnSource.replace(/'/g, "'\\''")}'`);
+      console.log(`[Rsync Exec] ADDED --exclude-from='${excludeFilePathOnSource}' to flags for task ${task.id}`); // DEBUG
+    } else {
+      console.log(`[Rsync Exec] DID NOT add --exclude-from for task ${task.id}. Conditions: type=${automationConfig?.type}, processedLogFile=${automationConfig?.processedLogFile}, scanPath=${automationConfig?.scanDirectoryPath}`); // DEBUG
     }
   }
   const effectiveFlagsString = finalFlags.join(' ');
