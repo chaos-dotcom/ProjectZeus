@@ -432,8 +432,21 @@
                     body: JSON.stringify(newHost)
                 });
                 if (!response.ok) {
-                     const errorData = await response.json();
-                    throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+                    let errorMessage = `Failed to add host. HTTP status: ${response.status}`;
+                    try {
+                        const contentType = response.headers.get("content-type");
+                        if (contentType && contentType.includes("application/json")) {
+                            const errorData = await response.json();
+                            errorMessage = errorData.message || JSON.stringify(errorData);
+                        } else {
+                            const errorText = await response.text();
+                            errorMessage = errorText || errorMessage; // Use errorText if available
+                        }
+                    } catch (e) {
+                        // If parsing the error response fails, stick with the initial status message
+                        console.error("Could not parse error response:", e);
+                    }
+                    throw new Error(errorMessage);
                 }
                 addHostForm.reset();
                 fetchAndRenderHosts(); // Refresh list and dropdowns
