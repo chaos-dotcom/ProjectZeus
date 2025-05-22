@@ -833,7 +833,12 @@ async function executeRsyncCommand(task: Task, pathPair: PathPair, hostsList: Ho
     // --- END SERVER-SIDE DEBUGGING ---
 
     if (automationConfig && automationConfig.type === 'turbosort' && automationConfig.processedLogFile && automationConfig.scanDirectoryPath) {
-      let excludeFilePathOnSource = path.join(automationConfig.scanDirectoryPath, automationConfig.processedLogFile);
+      // Extract project name from the source path
+      const projectName = path.basename(pathPair.source.endsWith('/') ? pathPair.source.slice(0, -1) : pathPair.source);
+      
+      // Create a project-specific exclude file name
+      const projectSpecificExcludeFile = `${automationConfig.processedLogFile}_${projectName}.txt`;
+      let excludeFilePathOnSource = path.join(automationConfig.scanDirectoryPath, projectSpecificExcludeFile);
       
       // --- Ensure the exclude file exists on the source host BEFORE rsync ---
       const touchCommand = `touch '${excludeFilePathOnSource.replace(/'/g, "'\\''")}'`;
@@ -916,6 +921,11 @@ async function executeRsyncCommand(task: Task, pathPair: PathPair, hostsList: Ho
 
             if (automationConfig && sourceHostObj && automationConfig.type === 'turbosort' && automationConfig.processedLogFile && task.triggerFilePath) {
               try {
+                // Extract project name from the source path
+                const projectName = path.basename(pathPair.source.endsWith('/') ? pathPair.source.slice(0, -1) : pathPair.source);
+                
+                // Create a project-specific exclude file name
+                const projectSpecificExcludeFile = `${automationConfig.processedLogFile}_${projectName}.txt`;
                 // Get the list of files that were transferred in this rsync operation
                 // We'll parse the stdout to get the list of files
                 const transferredFiles: string[] = [];
@@ -974,8 +984,8 @@ async function executeRsyncCommand(task: Task, pathPair: PathPair, hostsList: Ho
                   }
                 }
                 
-                // Construct the exclude file path on the source host
-                const excludeFilePathOnSource = path.join(automationConfig.scanDirectoryPath, automationConfig.processedLogFile);
+                // Construct the project-specific exclude file path on the source host
+                const excludeFilePathOnSource = path.join(automationConfig.scanDirectoryPath, projectSpecificExcludeFile);
                 
                 // Create a command to append each transferred file to the exclude file
                 let appendEntries = '';
