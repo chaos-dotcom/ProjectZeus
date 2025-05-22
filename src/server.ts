@@ -61,8 +61,8 @@ interface AutomationConfig {
   scanDirectoryPath: string;      // The base directory on scanHostId to scan recursively
   destinationHostIds: string[];   // Array of host IDs to copy the project folder to
   destinationBasePath: string;    // Base path on each destination host
+  processedLogFile?: string;      // For .turbosort: filename on source host listing processed project folders
   // templateTaskId?: string; // For future use: ID of a Task to use as a template
-  // lastProcessedFiles?: { [filePath: string]: string }; // For "one and done": filePath -> timestamp/status
 }
 
 let automationConfigs: AutomationConfig[] = []; // Will be populated by loadData
@@ -408,6 +408,11 @@ app.post('/api/automation-configs', async (req, res) => {
     destinationHostIds,
     destinationBasePath,
   };
+
+  if (type === 'turbosort') {
+    newConfig.processedLogFile = `.projectzeus_processed_${newConfig.id}.txt`;
+  }
+
   automationConfigs.push(newConfig);
   await saveData();
   res.status(201).json(newConfig);
@@ -808,33 +813,49 @@ async function executeRsyncCommand(task: Task, pathPair: PathPair, hostsList: Ho
   
   const flagsString = task.flags.join(' ');
   let rsyncCommand: string;
+  let finalFlags = [...task.flags]; // Start with task's flags
+
+  // Check if this task is from a .turbosort automation and needs an exclude file
+  if (task.automationConfigId) {
+    const automationConfig = automationConfigs.find(ac => ac.id === task.automationConfigId);
+    if (automationConfig && automationConfig.type === 'turbosort' && automationConfig.processedLogFile && automationConfig.scanDirectoryPath) {
+      // The processedLogFile path must be absolute on the source host, or relative to where rsync is invoked from (user's home dir for remote).
+      // For simplicity, let's assume it's in the scanDirectoryPath.
+      // Rsync needs the path to the exclude file as seen by the source side of the transfer.
+      let excludeFilePathOnSource = path.join(automationConfig.scanDirectoryPath, automationConfig.processedLogFile);
+      // If source is remote, this path is already correct for the remote machine.
+      // If source is localhost, this is a local path.
+      
+      // Ensure path separators are correct for the source host if it's remote and not Unix-like (though we assume Unix-like for SSH)
+      // For now, path.join should be fine for Unix-like systems.
+      finalFlags.push(`--exclude-from='${excludeFilePathOnSource.replace(/'/g, "'\\''")}'`);
+    }
+  }
+  const effectiveFlagsString = finalFlags.join(' ');
+
 
   if (sourceHostObj.id !== 'localhost' && destinationHostObj.id !== 'localhost') {
     if (sourceHostObj.id === destinationHostObj.id) {
       // Remote-to-SAME-Remote: SSH into the host and perform a local rsync there.
-      const remoteLocalRsyncCommand = `rsync ${flagsString} '${pathPair.source.replace(/'/g, "'\\''")}' '${pathPair.destination.replace(/'/g, "'\\''")}'`;
+      const remoteLocalRsyncCommand = `rsync ${effectiveFlagsString} '${pathPair.source.replace(/'/g, "'\\''")}' '${pathPair.destination.replace(/'/g, "'\\''")}'`;
       const sshPortOption = sourceHostObj.port ? `-p ${sourceHostObj.port}` : '';
       rsyncCommand = `ssh -i "${privateKeyPath}" ${sshPortOption} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes ${sourceHostObj.user}@${sourceHostObj.hostname} "${remoteLocalRsyncCommand.replace(/"/g, '\\"')}"`;
       console.log(`Executing remote-to-same-remote rsync (on ${sourceHostObj.alias}): ${rsyncCommand.split(' ')[0]} ... details in task log`);
     } else {
       // Remote-to-DIFFERENT-Remote: SSH into sourceHostObj (RHA) and execute rsync from there to destinationHostObj (RHB).
-      // RHA uses its own default SSH configuration to connect to RHB.
-      // WSS only provides the port for RHB if it's non-standard and specified in RHB's host config.
       const rhaToRhbSshCommandForRsync = `ssh${destinationHostObj.port ? ` -p ${destinationHostObj.port}` : ''}`;
-      const remoteRsyncCommand = `rsync ${flagsString} -e '${rhaToRhbSshCommandForRsync.replace(/'/g, "'\\''")}' '${pathPair.source.replace(/'/g, "'\\''")}' '${destinationHostObj.user}@${destinationHostObj.hostname}:${pathPair.destination.replace(/'/g, "'\\''")}'`;
-      
-      // WSS connects to RHA using websync_id_rsa and specific SSH options.
+      const remoteRsyncCommand = `rsync ${effectiveFlagsString} -e '${rhaToRhbSshCommandForRsync.replace(/'/g, "'\\''")}' '${pathPair.source.replace(/'/g, "'\\''")}' '${destinationHostObj.user}@${destinationHostObj.hostname}:${pathPair.destination.replace(/'/g, "'\\''")}'`;
       const outerSshPortOption = sourceHostObj.port ? `-p ${sourceHostObj.port}` : '';
       rsyncCommand = `ssh -i "${privateKeyPath}" ${outerSshPortOption} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes ${sourceHostObj.user}@${sourceHostObj.hostname} "${remoteRsyncCommand.replace(/"/g, '\\"')}"`;
       console.log(`Executing remote-to-different-remote rsync (WSS -> ${sourceHostObj.alias} -> ${destinationHostObj.alias}): ${rsyncCommand.split(' ')[0]} ... details in task log`);
     }
   } else if (sourceHostObj.id !== 'localhost' || destinationHostObj.id !== 'localhost') {
     // Local-to-Remote or Remote-to-Local
-    rsyncCommand = `rsync ${flagsString} -e 'ssh ${rsyncSshCommand.substring(4)}' "${sourceArg}" "${destinationArg}"`;
+    rsyncCommand = `rsync ${effectiveFlagsString} -e 'ssh ${rsyncSshCommand.substring(4)}' "${sourceArg}" "${destinationArg}"`;
     console.log(`Executing rsync (local involved): ${rsyncCommand}`);
   } else {
     // Local-to-Local
-    rsyncCommand = `rsync ${flagsString} "${sourceArg}" "${destinationArg}"`;
+    rsyncCommand = `rsync ${effectiveFlagsString} "${sourceArg}" "${destinationArg}"`;
     console.log(`Executing rsync (local-to-local): ${rsyncCommand}`);
   }
 
