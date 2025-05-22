@@ -962,11 +962,15 @@
                                 destinationPath: finalDestinationPath,
                                 flags: (() => {
                                     let baseFlags = config.type === 'livework' ? ['-a', '-v', '--delete', '-u'] : ['-a', '-v', '--delete'];
+                                    // --- DEBUGGING: Log config properties for flag generation ---
+                                    console.log(`[Automation UI Flags] Config ID: ${config.id}, Type: ${config.type}, ProcessedLogFile: ${config.processedLogFile}, ScanPath: ${config.scanDirectoryPath}`);
+                                    // --- END DEBUGGING ---
                                     if (config.type === 'turbosort' && config.processedLogFile && config.scanDirectoryPath) {
                                         // Construct the exclude file path as the backend would for display purposes.
                                         // This assumes Unix-like paths.
                                         const excludeFilePath = `${config.scanDirectoryPath}/${config.processedLogFile}`.replace(/\/\//g, '/');
                                         baseFlags.push(`--exclude-from='${excludeFilePath}'`);
+                                        console.log(`[Automation UI Flags] Added --exclude-from for ${config.id}: ${excludeFilePath}`); // DEBUG
                                     }
                                     return baseFlags;
                                 })(),
