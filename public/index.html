@@ -1095,6 +1095,27 @@
                     </div>
                 `;
                 
+                taskItem.querySelector('.delete-task').addEventListener('click', async () => {
+                    const taskId = task.id;
+                    if (confirm(`Are you sure you want to delete task "${task.name}"?`)) {
+                        try {
+                            const response = await fetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
+                            if (!response.ok) {
+                                let errorMsg = `Failed to delete task. Status: ${response.status}`;
+                                try {
+                                    const errorData = await response.json();
+                                    errorMsg = errorData.message || errorMsg;
+                                } catch (e) { /* Ignore if response is not JSON */ }
+                                throw new Error(errorMsg);
+                            }
+                            fetchAndRenderTasks(); // Refresh the tasks list
+                        } catch (error) {
+                            console.error(`Error deleting task ${taskId}:`, error);
+                            alert(`Error deleting task: ${error.message}`);
+                        }
+                    }
+                });
+
                 taskItem.querySelector('.run-task-btn').addEventListener('click', async () => {
                     const taskId = task.id;
                     const runButton = taskItem.querySelector('.run-task-btn');

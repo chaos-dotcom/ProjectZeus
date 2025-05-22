@@ -525,6 +525,16 @@ app.post('/api/tasks', async (req, res) => {
     await saveData();
     res.status(201).json(newTask);
 });
+app.delete('/api/tasks/:taskId', async (req, res) => {
+    const { taskId } = req.params;
+    const taskIndex = tasks.findIndex(t => t.id === taskId);
+    if (taskIndex === -1) {
+        return res.status(404).json({ message: 'Task not found.' });
+    }
+    tasks.splice(taskIndex, 1);
+    await saveData(); // Persist the change
+    res.status(204).send(); // No content, successful deletion
+});
 async function executeRsyncCommand(task, pathPair, hostsList) {
     const sourceHostObj = hostsList.find(h => h.id === task.sourceHost);
     const destinationHostObj = hostsList.find(h => h.id === task.destinationHost);

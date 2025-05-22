@@ -661,6 +661,19 @@ app.post('/api/tasks', async (req, res) => {
   res.status(201).json(newTask);
 });
 
+app.delete('/api/tasks/:taskId', async (req, res) => {
+  const { taskId } = req.params;
+  const taskIndex = tasks.findIndex(t => t.id === taskId);
+
+  if (taskIndex === -1) {
+    return res.status(404).json({ message: 'Task not found.' });
+  }
+
+  tasks.splice(taskIndex, 1);
+  await saveData(); // Persist the change
+  res.status(204).send(); // No content, successful deletion
+});
+
 // --- Rsync Task Execution ---
 interface RsyncExecutionResult {
   pathPair: PathPair;
