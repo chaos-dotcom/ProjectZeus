@@ -164,6 +164,58 @@
         .log-entry.console-info { color: #61afef; /* Blue */ }
         .log-timestamp { color: #5c6370; margin-right: 5px; } /* Darker grey for timestamp */
         .log-type { font-weight: bold; margin-right: 5px; }
+
+        /* Job History Log Styles */
+        .job-history-item {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            cursor: pointer;
+        }
+        .job-history-summary {
+            padding: 10px 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .job-history-summary.status-success { background-color: #d4edda; border-left: 5px solid #28a745; }
+        .job-history-summary.status-warning { background-color: #fff3cd; border-left: 5px solid #ffc107; }
+        .job-history-summary.status-error { background-color: #f8d7da; border-left: 5px solid #dc3545; }
+        
+        .job-history-summary .task-name { font-weight: bold; }
+        .job-history-summary .timestamp { font-size: 0.9em; color: #555; }
+        .job-history-summary .status-indicator {
+            padding: 3px 8px;
+            border-radius: 10px;
+            font-size: 0.8em;
+            color: white;
+            text-transform: uppercase;
+        }
+        .job-history-summary.status-success .status-indicator { background-color: #28a745; }
+        .job-history-summary.status-warning .status-indicator { background-color: #ffc107; color: #333; }
+        .job-history-summary.status-error .status-indicator { background-color: #dc3545; }
+
+        .job-history-details {
+            padding: 15px;
+            background-color: #f9f9f9;
+            border-top: 1px solid #eee;
+            display: none; /* Hidden by default */
+        }
+        .job-history-details pre {
+            background-color: #282c34;
+            color: #abb2bf;
+            padding: 10px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            word-break: break-all;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+            font-size: 0.85em;
+        }
+        .job-history-details h5 { margin-top: 0; margin-bottom: 5px; }
+        .job-history-details .path-pair-log { margin-bottom: 10px; }
+        .job-history-details .path-pair-log p { margin: 2px 0; }
     </style>
 </head>
 <body>
@@ -174,7 +226,7 @@
             <a href="#" data-tab="tasks" class="active-nav-link">Tasks</a>
             <a href="#" data-tab="hosts">Hosts</a>
             <a href="#" data-tab="automation">Automation</a>
-            <a href="#" data-tab="logs">Logs</a>
+            <a href="#" data-tab="job-history">Job History</a>
         </nav>
     </header>
 
@@ -256,12 +308,12 @@
         </div>
     </div>
 
-    <!-- Logs Section -->
-    <div class="container tab-content" id="logs-section">
-        <h2>Client-Side Logs</h2>
-        <button id="clearClientLogsButton" class="btn btn-danger" style="margin-bottom: 10px; background-color: #dc3545; color: white;">Clear Logs</button>
-        <div id="logsDisplay">
-            <p>Client-side console messages will appear here.</p>
+    <!-- Job History Section -->
+    <div class="container tab-content" id="job-history-section">
+        <h2>Job Run History</h2>
+        <button id="refreshJobHistoryButton" class="btn btn-info" style="margin-bottom: 10px;">Refresh History</button>
+        <div id="jobHistoryList">
+            <p>Job run history will appear here.</p>
         </div>
     </div>
 
@@ -398,10 +450,9 @@
         let editingAutomationConfigId = null;
         let currentProposedJobs = []; // To store details for tasks to be created by the button
 
-        // Client-side logging elements
-        const logsDisplayElement = document.getElementById('logsDisplay');
-        const clearClientLogsButton = document.getElementById('clearClientLogsButton');
-        let clientLogs = [];
+        // Job History Elements
+        const jobHistoryListElement = document.getElementById('jobHistoryList');
+        const refreshJobHistoryButton = document.getElementById('refreshJobHistoryButton');
 
 
         // Tab Navigation Elements
@@ -425,88 +476,6 @@
                     messageBanner.style.display = 'none';
                 }, duration);
             }
-        }
-
-        // --- Client-Side Logging ---
-        function formatLogArgument(arg) {
-            if (arg instanceof Error) {
-                return `Error: ${arg.message}\n${arg.stack ? arg.stack : '(no stack trace)'}`;
-            }
-            if (typeof arg === 'object' && arg !== null) {
-                try {
-                    return JSON.stringify(arg, null, 2);
-                } catch (e) {
-                    return '[Unserializable Object]';
-                }
-            }
-            return String(arg);
-        }
-        
-        function renderClientLogs() {
-            if (!logsDisplayElement) return;
-            logsDisplayElement.innerHTML = ''; // Clear previous logs
-            clientLogs.forEach(log => {
-                const logEntry = document.createElement('div');
-                logEntry.className = `log-entry console-${log.type}`;
-                
-                const timestampSpan = document.createElement('span');
-                timestampSpan.className = 'log-timestamp';
-                timestampSpan.textContent = `[${log.timestamp.toLocaleTimeString()}]`;
-                
-                const typeSpan = document.createElement('span');
-                typeSpan.className = 'log-type';
-                typeSpan.textContent = `[${log.type.toUpperCase()}]`;
-
-                const messageSpan = document.createElement('span');
-                messageSpan.textContent = log.args.map(formatLogArgument).join(' ');
-
-                logEntry.appendChild(timestampSpan);
-                logEntry.appendChild(typeSpan);
-                logEntry.appendChild(messageSpan);
-                logsDisplayElement.appendChild(logEntry);
-            });
-            logsDisplayElement.scrollTop = logsDisplayElement.scrollHeight;
-        }
-
-        const originalConsoleLog = console.log;
-        console.log = (...args) => {
-            clientLogs.push({ type: 'log', args, timestamp: new Date() });
-            originalConsoleLog.apply(console, args);
-            if (document.getElementById('logs-section')?.classList.contains('active')) {
-                renderClientLogs();
-            }
-        };
-        const originalConsoleWarn = console.warn;
-        console.warn = (...args) => {
-            clientLogs.push({ type: 'warn', args, timestamp: new Date() });
-            originalConsoleWarn.apply(console, args);
-            if (document.getElementById('logs-section')?.classList.contains('active')) {
-                renderClientLogs();
-            }
-        };
-        const originalConsoleError = console.error;
-        console.error = (...args) => {
-            clientLogs.push({ type: 'error', args, timestamp: new Date() });
-            originalConsoleError.apply(console, args);
-            if (document.getElementById('logs-section')?.classList.contains('active')) {
-                renderClientLogs();
-            }
-        };
-         const originalConsoleInfo = console.info;
-        console.info = (...args) => {
-            clientLogs.push({ type: 'info', args, timestamp: new Date() });
-            originalConsoleInfo.apply(console, args);
-            if (document.getElementById('logs-section')?.classList.contains('active')) {
-                renderClientLogs();
-            }
-        };
-
-        if (clearClientLogsButton) {
-            clearClientLogsButton.addEventListener('click', () => {
-                clientLogs = [];
-                renderClientLogs();
-                showMessage('Client-side logs cleared.', 'info');
-            });
         }
         
         const rsyncFlags = [
@@ -546,8 +515,8 @@
                 content.classList.remove('active');
                 if (content.id === targetTabId + '-section') {
                     content.classList.add('active');
-                    if (targetTabId === 'logs') { // When Logs tab is activated, render logs
-                        renderClientLogs();
+                    if (targetTabId === 'job-history') { 
+                        fetchAndRenderJobHistory();
                     }
                 }
             });
@@ -1495,6 +1464,76 @@
                 }
             });
         }
+
+        // --- Job History Tab Functionality ---
+        async function fetchAndRenderJobHistory() {
+            if (!jobHistoryListElement) return;
+            jobHistoryListElement.innerHTML = '<p>Loading job history...</p>';
+            try {
+                const response = await fetch('/api/job-run-logs');
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                const logs = await response.json();
+                renderJobHistoryList(logs);
+            } catch (error) {
+                console.error('Error fetching job history:', error);
+                jobHistoryListElement.innerHTML = '<p style="color:red;">Error loading job history.</p>';
+                showMessage(`Error fetching job history: ${error.message}`, 'error');
+            }
+        }
+
+        function renderJobHistoryList(logs) {
+            jobHistoryListElement.innerHTML = '';
+            if (logs.length === 0) {
+                jobHistoryListElement.innerHTML = '<p>No job run history found.</p>';
+                return;
+            }
+
+            logs.forEach(log => {
+                const itemDiv = document.createElement('div');
+                itemDiv.className = `job-history-item`;
+                
+                const summaryDiv = document.createElement('div');
+                summaryDiv.className = `job-history-summary status-${log.status}`;
+                summaryDiv.innerHTML = `
+                    <span class="task-name">${log.taskName} (ID: ${log.taskId})</span>
+                    <span class="timestamp">${new Date(log.startTime).toLocaleString()} - ${new Date(log.endTime).toLocaleTimeString()}</span>
+                    <span class="status-indicator">${log.status}</span>
+                `;
+
+                const detailsDiv = document.createElement('div');
+                detailsDiv.className = 'job-history-details';
+                
+                log.results.forEach((result, index) => {
+                    const pathPairDiv = document.createElement('div');
+                    pathPairDiv.className = 'path-pair-log';
+                    pathPairDiv.innerHTML = `
+                        <h5>Path Pair ${index + 1}: ${result.pathPair.source} &rarr; ${result.pathPair.destination}</h5>
+                        <p>Status: <span style="font-weight:bold; color:${result.success ? 'green' : 'red'};">${result.success ? 'Success' : 'Failed'}</span></p>
+                        ${result.command ? `<p>Command: <code>${result.command.replace(/"/g, '&quot;')}</code></p>` : ''}
+                    `;
+                    if (result.stdout) {
+                        pathPairDiv.innerHTML += `<h6>Output:</h6><pre>${result.stdout}</pre>`;
+                    }
+                    if (result.stderr) {
+                        pathPairDiv.innerHTML += `<h6>Errors:</h6><pre>${result.stderr}</pre>`;
+                    }
+                    detailsDiv.appendChild(pathPairDiv);
+                });
+
+                itemDiv.appendChild(summaryDiv);
+                itemDiv.appendChild(detailsDiv);
+
+                summaryDiv.addEventListener('click', () => {
+                    detailsDiv.style.display = detailsDiv.style.display === 'none' || detailsDiv.style.display === '' ? 'block' : 'none';
+                });
+                jobHistoryListElement.appendChild(itemDiv);
+            });
+        }
+
+        if (refreshJobHistoryButton) {
+            refreshJobHistoryButton.addEventListener('click', fetchAndRenderJobHistory);
+        }
+
 
         // Initial load
         document.addEventListener('DOMContentLoaded', () => {

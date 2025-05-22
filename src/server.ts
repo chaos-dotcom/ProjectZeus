@@ -872,6 +872,13 @@ app.post('/api/tasks/run-all', async (req, res) => {
   res.json({ message: 'All tasks execution attempted.', summary: allTasksRunSummaries });
 });
 
+// --- Job Run Log API Endpoint ---
+app.get('/api/job-run-logs', (req, res) => {
+  // Return logs sorted by start time, newest first
+  const sortedLogs = [...jobRunLogs].sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime());
+  res.json(sortedLogs);
+});
+
 
 // A simple API endpoint example
 app.get('/api/hello', (req, res) => {
