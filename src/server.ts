@@ -51,13 +51,26 @@ interface AutomationConfig {
 
 let automationConfigs: AutomationConfig[] = []; // Will be populated by loadData
 
+// --- Job Run Logging ---
+interface JobRunLog {
+  id: string; // Unique ID for this log entry
+  taskId: string;
+  taskName: string;
+  startTime: string;
+  endTime: string;
+  status: 'success' | 'warning' | 'error'; // success = all paths ok, warning = some paths failed, error = task not found or major issue
+  results: RsyncExecutionResult[]; // Detailed results from each path pair
+}
+
+let jobRunLogs: JobRunLog[] = []; // Will be populated by loadData
+
 
 // --- Data Persistence ---
 const DATA_FILE_PATH = path.join(__dirname, '..', 'websync-data.json');
 
 async function saveData(): Promise<void> {
   try {
-    const dataToSave = { hosts, tasks, automationConfigs };
+    const dataToSave = { hosts, tasks, automationConfigs, jobRunLogs };
     await fs.promises.writeFile(DATA_FILE_PATH, JSON.stringify(dataToSave, null, 2), 'utf-8');
     // console.log('Data saved to file.'); // Optional: for debugging
   } catch (error) {
@@ -69,6 +82,7 @@ async function loadData(): Promise<void> {
   let loadedHosts: Host[] = [];
   let loadedTasks: Task[] = [];
   let loadedAutomationConfigs: AutomationConfig[] = [];
+  let loadedJobRunLogs: JobRunLog[] = [];
 
   try {
     if (fs.existsSync(DATA_FILE_PATH)) {
@@ -77,6 +91,7 @@ async function loadData(): Promise<void> {
       loadedHosts = parsedData.hosts || [];
       loadedTasks = parsedData.tasks || [];
       loadedAutomationConfigs = parsedData.automationConfigs || [];
+      loadedJobRunLogs = parsedData.jobRunLogs || [];
     }
   } catch (error) {
     console.error('Error reading or parsing data file. Initializing with empty/default data.', error);
@@ -94,10 +109,14 @@ async function loadData(): Promise<void> {
   hosts = [localhostEntry, ...loadedHosts.filter(h => h.id !== 'localhost')];
   tasks = loadedTasks;
   automationConfigs = loadedAutomationConfigs;
+  jobRunLogs = loadedJobRunLogs;
 
   // If the file didn't exist initially or was unparsable and resulted in empty data structures, save initial state.
   if (!fs.existsSync(DATA_FILE_PATH) || 
-      ((loadedHosts.length === 0 && !localhostFromFile) && loadedTasks.length === 0 && loadedAutomationConfigs.length === 0)
+      ((loadedHosts.length === 0 && !localhostFromFile) && 
+       loadedTasks.length === 0 && 
+       loadedAutomationConfigs.length === 0 &&
+       loadedJobRunLogs.length === 0)
      ) {
     await saveData(); 
   }
@@ -765,26 +784,54 @@ async function executeRsyncCommand(task: Task, pathPair: PathPair, hostsList: Ho
 app.post('/api/tasks/:taskId/run', async (req, res) => {
   const { taskId } = req.params;
   const task = tasks.find(t => t.id === taskId);
+  const startTime = new Date().toISOString();
 
   if (!task) {
-    return res.status(404).json({ message: 'Task not found.' });
+    const errorMsg = 'Task not found.';
+    jobRunLogs.push({
+      id: Date.now().toString(),
+      taskId: taskId,
+      taskName: 'Unknown Task',
+      startTime,
+      endTime: new Date().toISOString(),
+      status: 'error',
+      results: [{ pathPair: {source: 'N/A', destination: 'N/A'}, success: false, stdout: '', stderr: errorMsg, command: 'N/A' }]
+    });
+    await saveData();
+    return res.status(404).json({ message: errorMsg });
   }
 
   const executionResults: RsyncExecutionResult[] = [];
   for (const pathPair of task.paths) {
     const result = await executeRsyncCommand(task, pathPair, hosts);
     executionResults.push(result);
-    // If a path pair fails, we could decide to stop or continue with other pairs.
-    // For now, let's continue and report all results.
   }
   
-  // Check if all pathPairs were successful
+  const endTime = new Date().toISOString();
   const overallSuccess = executionResults.every(r => r.success);
+  const someSuccess = executionResults.some(r => r.success);
+  let jobStatus: JobRunLog['status'] = 'error';
   if (overallSuccess) {
-    res.json({ message: `Task "${task.name}" executed.`, results: executionResults });
+    jobStatus = 'success';
+  } else if (someSuccess) {
+    jobStatus = 'warning'; // Some paths succeeded, some failed
+  }
+
+  jobRunLogs.push({
+    id: Date.now().toString(),
+    taskId: task.id,
+    taskName: task.name,
+    startTime,
+    endTime,
+    status: jobStatus,
+    results: executionResults
+  });
+  await saveData();
+
+  if (jobStatus === 'success') {
+    res.json({ message: `Task "${task.name}" executed successfully.`, results: executionResults });
   } else {
-    // Send 500 if any part failed, but still send results
-    res.status(500).json({ message: `Task "${task.name}" executed with some errors.`, results: executionResults });
+    res.status(500).json({ message: `Task "${task.name}" executed with ${jobStatus === 'warning' ? 'some errors' : 'errors'}.`, results: executionResults });
   }
 });
 
@@ -794,19 +841,35 @@ app.post('/api/tasks/run-all', async (req, res) => {
   }
 
   console.log('Starting to run all tasks...');
-  const allTasksResults = [];
+  const allTasksRunSummaries = [];
   for (const task of tasks) {
-    const executionResults = [];
+    const startTime = new Date().toISOString();
+    const executionResults: RsyncExecutionResult[] = [];
     for (const pathPair of task.paths) {
       const result = await executeRsyncCommand(task, pathPair, hosts);
       executionResults.push(result);
     }
-    allTasksResults.push({ taskId: task.id, taskName: task.name, results: executionResults });
+    const endTime = new Date().toISOString();
+    const overallSuccess = executionResults.every(r => r.success);
+    const someSuccess = executionResults.some(r => r.success);
+    let jobStatus: JobRunLog['status'] = 'error';
+    if (overallSuccess) jobStatus = 'success';
+    else if (someSuccess) jobStatus = 'warning';
+
+    jobRunLogs.push({
+      id: Date.now().toString(),
+      taskId: task.id,
+      taskName: task.name,
+      startTime,
+      endTime,
+      status: jobStatus,
+      results: executionResults
+    });
+    allTasksRunSummaries.push({ taskId: task.id, taskName: task.name, status: jobStatus, resultsCount: executionResults.length });
   }
+  await saveData();
   console.log('Finished running all tasks.');
-  // This response could be very large if there are many tasks/paths or lots of output.
-  // Consider how to handle this for many tasks (e.g., background execution and status polling).
-  res.json({ message: 'All tasks execution attempted.', summary: allTasksResults });
+  res.json({ message: 'All tasks execution attempted.', summary: allTasksRunSummaries });
 });
 
 
