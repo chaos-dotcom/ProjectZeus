@@ -410,7 +410,8 @@ app.post('/api/automation-configs', async (req, res) => {
   };
 
   if (type === 'turbosort') {
-    newConfig.processedLogFile = `.projectzeus_processed_${newConfig.id}.txt`;
+    // Base filename for the processed log file - we'll create project-specific ones at runtime
+    newConfig.processedLogFile = `.projectzeus_processed_${newConfig.id}`;
   }
 
   automationConfigs.push(newConfig);
