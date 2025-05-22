@@ -89,6 +89,51 @@ app.delete('/api/hosts/:id', (req, res) => {
   res.status(204).send(); // No content
 });
 
+// PUT (update) an existing host
+app.put('/api/hosts/:id', (req, res) => {
+  const { id } = req.params;
+  const { alias, user, hostname, port } = req.body;
+
+  if (id === 'localhost' && (req.body.user || req.body.hostname || req.body.port)) {
+    // Allow changing alias of localhost, but not other critical fields.
+    if (Object.keys(req.body).some(key => !['alias'].includes(key))) {
+         return res.status(400).json({ message: 'Only the alias of Localhost can be modified.' });
+    }
+  }
+
+  if (!alias) { // User and hostname might not be sent if only alias is changing for localhost
+    if (id !== 'localhost' || !req.body.alias) { // if not localhost, or if localhost and no alias sent
+        return res.status(400).json({ message: 'Alias is required' });
+    }
+  }
+  if (id !== 'localhost' && (!user || !hostname)) {
+      return res.status(400).json({ message: 'User and Hostname are required for non-localhost entries' });
+  }
+
+  if (port && (isNaN(parseInt(port, 10)) || parseInt(port, 10) <= 0 || parseInt(port, 10) > 65535)) {
+    return res.status(400).json({ message: 'Port must be a valid number between 1 and 65535' });
+  }
+
+  const hostIndex = hosts.findIndex(h => h.id === id);
+  if (hostIndex === -1) {
+    return res.status(404).json({ message: 'Host not found' });
+  }
+
+  // Update fields
+  hosts[hostIndex].alias = alias || hosts[hostIndex].alias; // Keep old alias if new one not provided (e.g. for localhost)
+  if (id !== 'localhost') {
+    hosts[hostIndex].user = user;
+    hosts[hostIndex].hostname = hostname;
+    hosts[hostIndex].port = port ? parseInt(port, 10) : undefined;
+  } else { // For localhost, only update alias if provided
+      if (alias) hosts[hostIndex].alias = alias;
+  }
+
+
+  res.json(hosts[hostIndex]);
+});
+
+
 // SSH Key Copy ID
 app.post('/api/hosts/:id/ssh-copy-id', async (req, res) => {
   const { id } = req.params;

@@ -126,7 +126,7 @@
     <div class="container tab-content" id="hosts-section">
         <h2>Manage Hosts</h2>
         <div class="host-form-container">
-            <h3>Add New Host</h3>
+            <h3 id="hostFormTitle">Add New Host</h3>
             <form id="addHostForm" class="form-group">
                 <input type="text" id="hostAliasInput" class="host-alias-input" placeholder="Alias" required>
                 <input type="text" id="hostUserInput" class="host-user-input" placeholder="Username" required>
@@ -134,7 +134,8 @@
                 <input type="text" id="hostHostnameInput" class="host-hostname-input" placeholder="Hostname or IP" required>
                 <span style="margin-right: 5px;">:</span>
                 <input type="number" id="hostPortInput" class="host-port-input" placeholder="Port (optional)">
-                <button type="submit" class="btn btn-primary">Add Host</button>
+                <button type="submit" id="saveHostButton" class="btn btn-primary">Add Host</button>
+                <button type="button" id="cancelEditHostButton" class="btn" style="display:none; background-color: #6c757d; color:white;">Cancel</button>
             </form>
         </div>
 
@@ -246,11 +247,16 @@
 
         // Host Management Elements
         const addHostForm = document.getElementById('addHostForm');
+        const hostFormTitle = document.getElementById('hostFormTitle');
         const hostAliasInput = document.getElementById('hostAliasInput');
         const hostUserInput = document.getElementById('hostUserInput');
         const hostHostnameInput = document.getElementById('hostHostnameInput');
         const hostPortInput = document.getElementById('hostPortInput');
+        const saveHostButton = document.getElementById('saveHostButton');
+        const cancelEditHostButton = document.getElementById('cancelEditHostButton');
         const hostsListElement = document.getElementById('hostsList');
+
+        let editingHostId = null; // To store the ID of the host being edited
 
         // Tab Navigation Elements
         const navLinks = document.querySelectorAll('nav a[data-tab]');
@@ -346,13 +352,19 @@
                     <div class="host-alias">${host.alias}</div>
                     <div class="host-connection-string">${connectionString}</div>
                     <div>
+                        <button class="btn btn-sm btn-primary edit-host" style="margin-right: 5px; background-color: #ffc107; color: #212529;">Edit</button>
                         ${host.id !== 'localhost' ? '<button class="btn btn-ssh">SSH Setup</button>' : ''}
                         ${host.id !== 'localhost' ? `<button class="btn btn-delete-host" data-id="${host.id}">Delete</button>` : ''}
                     </div>
                 `;
+
+                hostItem.querySelector('.edit-host').addEventListener('click', () => {
+                    loadHostIntoForm(host);
+                });
                 
-                if (host.id !== 'localhost') {
-                    hostItem.querySelector('.btn-delete-host').addEventListener('click', async () => {
+                const deleteButton = hostItem.querySelector('.btn-delete-host');
+                if (deleteButton) {
+                    deleteButton.addEventListener('click', async () => {
                         if (confirm(`Are you sure you want to delete host "${host.alias}"?`)) {
                             try {
                                 const res = await fetch(`/api/hosts/${host.id}`, { method: 'DELETE' });
@@ -407,32 +419,83 @@
             });
         }
 
+        function resetHostForm() {
+            addHostForm.reset();
+            editingHostId = null;
+            hostFormTitle.textContent = 'Add New Host';
+            saveHostButton.textContent = 'Add Host';
+            cancelEditHostButton.style.display = 'none';
+            hostUserInput.disabled = false;
+            hostHostnameInput.disabled = false;
+            hostPortInput.disabled = false;
+        }
+
+        cancelEditHostButton.addEventListener('click', resetHostForm);
+
+        function loadHostIntoForm(host) {
+            editingHostId = host.id;
+            hostFormTitle.textContent = 'Edit Host';
+            hostAliasInput.value = host.alias;
+            hostUserInput.value = host.user;
+            hostHostnameInput.value = host.hostname;
+            hostPortInput.value = host.port || '';
+            saveHostButton.textContent = 'Save Changes';
+            cancelEditHostButton.style.display = 'inline-block';
+
+            // Disable user/hostname/port for localhost, only alias is editable
+            if (host.id === 'localhost') {
+                hostUserInput.disabled = true;
+                hostHostnameInput.disabled = true;
+                hostPortInput.disabled = true;
+            } else {
+                hostUserInput.disabled = false;
+                hostHostnameInput.disabled = false;
+                hostPortInput.disabled = false;
+            }
+        }
+
         addHostForm.addEventListener('submit', async (event) => {
             event.preventDefault();
-            const newHost = {
+            const hostData = {
                 alias: hostAliasInput.value.trim(),
                 user: hostUserInput.value.trim(),
                 hostname: hostHostnameInput.value.trim(),
                 port: hostPortInput.value.trim() ? parseInt(hostPortInput.value.trim(), 10) : undefined
             };
 
-            if (!newHost.alias || !newHost.user || !newHost.hostname) {
-                alert('Alias, User, and Hostname are required.');
+            if (!hostData.alias) { // Alias is always required
+                alert('Alias is required.');
                 return;
             }
-            if (newHost.port && (isNaN(newHost.port) || newHost.port <= 0 || newHost.port > 65535)) {
-                 alert('Port must be a valid number between 1 and 65535.');
+            // User and Hostname are required unless it's localhost (where they are disabled)
+            if (editingHostId !== 'localhost' && (hostData.user === '' || hostData.hostname === '')) {
+                 alert('User and Hostname are required for non-localhost entries.');
                  return;
             }
 
+            if (hostData.port && (isNaN(hostData.port) || hostData.port <= 0 || hostData.port > 65535)) {
+                 alert('Port must be a valid number between 1 and 65535.');
+                 return;
+            }
+            
+            // For localhost, only send alias if editing. Other fields are not sent.
+            let payload = hostData;
+            if (editingHostId === 'localhost') {
+                payload = { alias: hostData.alias };
+            }
+
+
+            const url = editingHostId ? `/api/hosts/${editingHostId}` : '/api/hosts';
+            const method = editingHostId ? 'PUT' : 'POST';
+
             try {
-                const response = await fetch('/api/hosts', {
-                    method: 'POST',
+                const response = await fetch(url, {
+                    method: method,
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(newHost)
+                    body: JSON.stringify(payload)
                 });
                 if (!response.ok) {
-                    let errorMessage = `Failed to add host. HTTP status: ${response.status}`;
+                    let errorMessage = `Failed to ${editingHostId ? 'update' : 'add'} host. HTTP status: ${response.status}`;
                     try {
                         const contentType = response.headers.get("content-type");
                         if (contentType && contentType.includes("application/json")) {
@@ -448,11 +511,11 @@
                     }
                     throw new Error(errorMessage);
                 }
-                addHostForm.reset();
+                resetHostForm(); // Resets form and editingHostId
                 fetchAndRenderHosts(); // Refresh list and dropdowns
             } catch (error) {
-                console.error('Error adding host:', error);
-                alert(`Error adding host: ${error.message}`);
+                console.error(`Error ${editingHostId ? 'updating' : 'adding'} host:`, error);
+                alert(`Error ${editingHostId ? 'updating' : 'adding'} host: ${error.message}`);
             }
         });
 
