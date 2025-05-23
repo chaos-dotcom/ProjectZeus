@@ -77,6 +77,10 @@ let automationScanCronJobs: cron.ScheduledTask[] = [];
 function translateScheduleToCron(scheduleString?: string): string | null {
     if (!scheduleString) return null;
     switch (scheduleString) {
+        case 'every_5_min':
+            return '*/5 * * * *'; // Every 5 minutes
+        case 'every_15_min':
+            return '*/15 * * * *'; // Every 15 minutes
         case 'hourly':
             return '0 * * * *'; // Every hour at minute 0
         case 'daily_3am':
