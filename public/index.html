@@ -8,7 +8,9 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <style>
         body { font-family: sans-serif; margin: 20px; background-color: #f4f4f4; color: #333; }
-        header { 
+        .pride-banner {
+            height: 15px; /* Height of the stripes banner */
+            width: 100%;
             background: linear-gradient(to right, 
                 #000000 0%, #000000 calc(100% / 11), /* Black */
                 #794F28 calc(100% / 11), #794F28 calc(2 * 100% / 11), /* Brown */
@@ -22,6 +24,9 @@
                 #F7A8B8 calc(9 * 100% / 11), #F7A8B8 calc(10 * 100% / 11), /* Pink */
                 #FFFFFF calc(10 * 100% / 11), #FFFFFF 100% /* White */
             );
+        }
+        header { 
+            background-color: navy; /* Main header background color */
             color: #fff; 
             padding: 1em 0; 
             text-align: center; 
@@ -256,6 +261,7 @@
     </style>
 </head>
 <body>
+    <div class="pride-banner"></div>
     <header>
         <img src="/projectzeus.gif" alt="Project Zeus Logo" class="header-gif">
         <div id="messageBanner" class="message-banner" style="display:none;"></div>
