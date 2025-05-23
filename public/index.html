@@ -33,13 +33,13 @@
             position: relative; /* Keep for any other potential relative children */
             display: flex;
             align-items: center; /* Vertically center flex items */
-            padding: 0 1em; /* Remove vertical padding, keep horizontal */
+            padding: 0 1em 0 0; /* Remove left padding, keep right padding */
         }
         header img.header-gif {
             /* position: absolute; Removed */
             /* top: 0; Removed */
             /* left: 0; Removed */
-            height: 5em; /* Doubled height to make it twice as wide (width: auto) */
+            height: 6em; /* Increased by 20% from 5em to make it wider */
             width: auto;   /* Maintain aspect ratio */
             margin-right: 1em; /* Space between GIF and content */
             flex-shrink: 0; /* Prevent GIF from shrinking */
