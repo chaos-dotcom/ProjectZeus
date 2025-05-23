@@ -1887,34 +1887,6 @@
         }
 
         if (deleteAllTasksBtn) {
-            deleteAllTasksBtn.addEventListener('click', async () => {
-                if (!confirm('Are you sure you want to delete ALL tasks? This action cannot be undone.')) return;
-
-                deleteAllTasksBtn.textContent = 'Deleting All...';
-                deleteAllTasksBtn.disabled = true;
-                try {
-                    const response = await fetch('/api/tasks/run-all', { method: 'POST' });
-                    const result = await response.json();
-                    console.log("Run all tasks result:", result);
-                    // Check summary for errors
-                    const anyFailed = result.summary && result.summary.some(taskResult => taskResult.results.some(r => !r.success));
-                    if (anyFailed) {
-                        showMessage(result.message + " Some tasks had errors. Check console for details.", 'error', 0); // Sticky
-                    } else {
-                        showMessage(result.message, 'success');
-                    }
-                    // Potentially update UI based on individual task successes in result.summary
-                } catch (error) {
-                    console.error('Error running all tasks:', error);
-                    showMessage(`Error running all tasks: ${error.message}`, 'error');
-                } finally {
-                    runAllTasksBtn.textContent = 'Run All Tasks';
-                    runAllTasksBtn.disabled = false;
-                }
-            });
-        }
-
-        if (deleteAllTasksBtn) {
             deleteAllTasksBtn.addEventListener('click', async function() { // Use function for 'this'
                 if (this.dataset.confirming === 'true') {
                     // Second click: perform action
@@ -1924,10 +1896,25 @@
                         const response = await fetch('/api/tasks/delete-all', { method: 'DELETE' });
                         if (!response.ok) {
                             let errorMsg = 'Failed to delete all tasks.';
-                            try { const errorData = await response.json(); errorMsg = errorData.message || errorMsg; } catch (e) {}
+                            try { 
+                                const errorData = await response.json(); 
+                                errorMsg = errorData.message || errorMsg; 
+                            } catch (e) {
+                                // If response is not JSON, use text or default message
+                                const errorText = await response.text();
+                                errorMsg = errorText || errorMsg;
+                            }
                             throw new Error(errorMsg);
                         }
-                        showMessage('All tasks deleted successfully.', 'success');
+                        // Check if response has content before trying to parse as JSON
+                        const contentType = response.headers.get("content-type");
+                        let successMessage = 'All tasks deleted successfully.';
+                        if (contentType && contentType.includes("application/json")) {
+                            const result = await response.json();
+                            successMessage = result.message || successMessage;
+                        }
+                        
+                        showMessage(successMessage, 'success');
                         fetchAndRenderTasks(); // Refresh the tasks list
                     } catch (error) {
                         console.error('Error deleting all tasks:', error);
@@ -1938,13 +1925,14 @@
                         this.textContent = 'Delete All Tasks';
                         this.disabled = false;
                         this.classList.remove('btn-warning');
-                        // this.classList.add('btn-danger'); // Original class
+                        this.classList.add('btn-danger'); // Ensure original class if it implies color
                     }
                 } else {
                     // First click: ask for confirmation
                     this.dataset.confirming = 'true';
                     this.textContent = 'Confirm Delete All?';
-                    this.classList.add('btn-warning');
+                    this.classList.remove('btn-danger'); // Remove danger class for confirmation state
+                    this.classList.add('btn-warning'); // Use warning class for confirmation state
                     showMessage('Click "Confirm Delete All?" again to PERMANENTLY delete all tasks. This cannot be undone.', 'info', 0); // Sticky
                 }
             });
