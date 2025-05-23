@@ -1,0 +1,9 @@
+node_modules
+npm-debug.log
+dist
+.git
+.gitignore
+.aider*
+websync-data.json
+job_history.json
+data

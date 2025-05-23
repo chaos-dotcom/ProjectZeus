@@ -132,8 +132,14 @@ let automationRunLogs: AutomationRunLog[] = []; // Will be populated by loadData
 
 
 // --- Data Persistence ---
-const DATA_FILE_PATH = path.join(__dirname, '..', 'websync-data.json');
-const JOB_HISTORY_FILE_PATH = path.join(__dirname, '..', 'job_history.json'); // New
+// Use a data directory that can be mounted as a volume in Docker
+const DATA_DIR = path.join(__dirname, '..', 'data');
+// Create data directory if it doesn't exist
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+const DATA_FILE_PATH = path.join(DATA_DIR, 'websync-data.json');
+const JOB_HISTORY_FILE_PATH = path.join(DATA_DIR, 'job_history.json'); // New
 
 async function saveData(): Promise<void> {
   try {

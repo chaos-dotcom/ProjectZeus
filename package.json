@@ -6,7 +6,9 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/server.js",
-    "dev": "npm run build && npm start"
+    "dev": "npm run build && npm start",
+    "docker:build": "docker build -t project-zeus .",
+    "docker:run": "docker run -p 3000:3000 -v $(pwd)/data:/app/data -v ~/.ssh:/root/.ssh --name project-zeus-container project-zeus"
   },
   "keywords": [
     "rsync",

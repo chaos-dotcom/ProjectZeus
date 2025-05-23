@@ -3,3 +3,4 @@ node_modules
 websync-data.json
 dist
 job_history.json
+data/

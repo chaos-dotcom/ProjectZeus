@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/app/data
+      - ~/.ssh:/root/.ssh
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
