@@ -2,7 +2,10 @@
 
 Project Zeus is a web-based task manager for rsync, designed to help you add, schedule, and maintain rsync tasks in a modern and user-friendly interface. This project is built with TypeScript, Node.js, and Express.
 
-It is not a fork but heaviliy inspired by websync which having been archived by it's owner in 2019 now means has a number of security vulnerabilities which meant it was eaiser to write a entirely new program from the ground up in typescript. many of the functions are the same with some additional functions that are niche but are designed for my own workflow. if you find these useful then that is wonderful. 
+It is not a fork but heavily inspired by [websync](https://github.com/furier/websync) which having been archived by it's owner in 2019 now means has a number of security vulnerabilities which meant it was easier to write a entirely new program from the ground up in typescript, it is worth mention this is not a fork of the code no code was copied or transferred,  I love the ideas that websync created with and honor it with a reference to it in the SSH key that zeus uses to connect to the first system for rsyncing. 
+
+Many of the functions are the same with some additional functions that are niche but are designed for my own workflow. if you find these useful then that is wonderful. 
+
 
 ## Features
 
@@ -38,10 +41,10 @@ project-zeus/
 
 ## Prerequisites
 
-*   Node.js (v14.x or later recommended)
+*   Node.js (v23.x or later recommended)
 *   npm (usually comes with Node.js)
-*   `rsync` installed on the server running WebSync TS and on any remote hosts.
-*   `sshpass` installed on the server running WebSync TS (for the "SSH Setup" feature to copy SSH keys).
+*   `rsync` installed on the server running Project Zeus TS and on any remote hosts.
+*   `sshpass` installed on the server running Project Zeus TS (for the "SSH Setup" feature to copy SSH keys).
     *   Debian/Ubuntu: `sudo apt-get install sshpass`
     *   macOS (Homebrew): `brew install hudochenkov/sshpass/sshpass` or `brew install sshpass`
 *   SSH access configured for any remote hosts you intend to use (passwordless key-based authentication is recommended for automated tasks).
