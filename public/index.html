@@ -310,6 +310,100 @@
         }
         .task-details h5 { margin-top: 0; margin-bottom: 5px; }
         .task-details p:first-child { margin-top: 0; } /* For "Loading command..." */
+
+        /* NEW: Modal Styles */
+        .modal {
+            display: none; /* Hidden by default */
+            position: fixed; /* Stay in place */
+            z-index: 1001; /* Sit on top, above message banner */
+            left: 0;
+            top: 0;
+            width: 100%; /* Full width */
+            height: 100%; /* Full height */
+            overflow: auto; /* Enable scroll if needed */
+            background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: 10% auto; /* 10% from the top and centered */
+            padding: 0;
+            border: 1px solid #888;
+            width: 60%; /* Could be more or less, depending on screen size */
+            box-shadow: 0 4px 8px 0 rgba(0,0,0,0.2),0 6px 20px 0 rgba(0,0,0,0.19);
+            border-radius: 4px;
+        }
+        .modal-header {
+            padding: 10px 15px;
+            background-color: #007bff;
+            color: white;
+            border-bottom: 1px solid #ddd;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-top-left-radius: 3px;
+            border-top-right-radius: 3px;
+        }
+        .modal-header h4 { margin: 0; }
+        .modal-body { padding: 15px; min-height: 200px; max-height: 400px; overflow-y: auto; }
+        .modal-footer {
+            padding: 10px 15px;
+            background-color: #f9f9f9;
+            border-top: 1px solid #ddd;
+            text-align: right;
+            border-bottom-left-radius: 3px;
+            border-bottom-right-radius: 3px;
+        }
+        .modal-footer .btn { margin-left: 5px; }
+        .close-btn {
+            color: white;
+            font-size: 28px;
+            font-weight: bold;
+            background: none;
+            border: none;
+            cursor: pointer;
+        }
+        .close-btn:hover, .close-btn:focus {
+            color: #ccc;
+            text-decoration: none;
+        }
+        #directoryBrowserList {
+            list-style-type: none;
+            padding: 0;
+        }
+        #directoryBrowserList li {
+            padding: 8px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+        }
+        #directoryBrowserList li:last-child {
+            border-bottom: none;
+        }
+        #directoryBrowserList li:hover {
+            background-color: #f0f0f0;
+        }
+        #directoryBrowserList li.selected-item {
+            background-color: #007bff;
+            color: white;
+        }
+        .current-path-display {
+            margin-bottom: 10px;
+            padding: 8px;
+            background-color: #e9ecef;
+            border-radius: 4px;
+        }
+        .browse-btn { /* Style for the small "Browse..." buttons */
+            padding: 6px 10px;
+            font-size: 0.8em;
+            margin-left: 5px;
+            background-color: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .browse-btn:hover {
+            background-color: #5a6268;
+        }
     </style>
 </head>
 <body>
@@ -376,6 +470,7 @@
                 <div class="form-group">
                     <label for="automationConfigScanPathInput">Scan Directory Path:</label>
                     <input type="text" id="automationConfigScanPathInput" placeholder="/path/to/scan/recursively" required style="flex-grow:2;">
+                    <button type="button" class="browse-btn" id="browseAutomationScanPath">Browse...</button>
                 </div>
                 <div class="form-group">
                     <label for="automationConfigDestHostsSelect">Destination Hosts:</label>
@@ -385,6 +480,7 @@
                 <div class="form-group">
                     <label for="automationConfigDestBasePathInput">Destination Base Path:</label>
                     <input type="text" id="automationConfigDestBasePathInput" placeholder="/path/on/destination/hosts" required style="flex-grow:2;">
+                    <button type="button" class="browse-btn" id="browseAutomationDestBasePath">Browse...</button>
                 </div>
 
                 <!-- NEW: Scan Schedule for Automation -->
@@ -547,6 +643,29 @@
         <p style="text-align:center; margin-top: 20px; padding-bottom: 50px;">&copy; 2025 Project Zeus</p> <!-- Added padding-bottom to prevent overlap with fixed banner -->
     </footer>
 
+    <!-- NEW: Directory Browser Modal -->
+    <div id="directoryBrowserModal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 id="directoryBrowserTitle">Browse Directory</h4>
+                <button type="button" class="close-btn" id="closeDirectoryBrowserBtn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="current-path-display">
+                    Current Path: <strong id="directoryBrowserCurrentPath">/</strong>
+                </div>
+                <div id="directoryBrowserLoading" style="display:none;">Loading...</div>
+                <ul id="directoryBrowserList">
+                    <!-- Directory entries will be listed here -->
+                </ul>
+            </div>
+            <div class="modal-footer">
+                <button type="button" id="directoryBrowserSelectBtn" class="btn btn-primary">Select Current Path</button>
+                <button type="button" id="directoryBrowserCancelBtn" class="btn">Cancel</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         const tasksListElement = document.getElementById('tasksList');
         const taskForm = document.getElementById('taskForm');
@@ -610,6 +729,19 @@
         const refreshJobHistoryButton = document.getElementById('refreshJobHistoryButton');
         const automationJobHistoryListElement = document.getElementById('automationJobHistoryList'); // New
 
+        // NEW: Directory Browser Elements
+        const directoryBrowserModal = document.getElementById('directoryBrowserModal');
+        const directoryBrowserTitle = document.getElementById('directoryBrowserTitle');
+        const closeDirectoryBrowserBtn = document.getElementById('closeDirectoryBrowserBtn');
+        const directoryBrowserCurrentPath = document.getElementById('directoryBrowserCurrentPath');
+        const directoryBrowserLoading = document.getElementById('directoryBrowserLoading');
+        const directoryBrowserList = document.getElementById('directoryBrowserList');
+        const directoryBrowserSelectBtn = document.getElementById('directoryBrowserSelectBtn');
+        const directoryBrowserCancelBtn = document.getElementById('directoryBrowserCancelBtn');
+
+        let directoryBrowserTargetInput = null; // To store the input element to populate
+        let directoryBrowserCurrentHostId = null;
+        let directoryBrowserSelectedPath = null; // For selecting a specific file/folder in the list
 
         // Tab Navigation Elements
         const navLinks = document.querySelectorAll('nav a[data-tab]');
@@ -1718,8 +1850,10 @@
             div.className = 'path-pair';
             div.innerHTML = `
                 <input type="text" class="source-path" placeholder="Source Path">
+                <button type="button" class="browse-btn browse-source-path">Browse...</button>
                 <span class="arrow">&rarr;</span>
                 <input type="text" class="destination-path" placeholder="Destination Path">
+                <button type="button" class="browse-btn browse-destination-path">Browse...</button>
                 <button type="button" class="btn btn-danger remove-path">&times;</button>
             `;
             div.querySelector('.remove-path').addEventListener('click', () => {
@@ -1729,6 +1863,18 @@
                 } else {
                     showMessage("At least one path pair is required.", 'error');
                 }
+            });
+
+            // NEW: Add event listeners for browse buttons within path pair
+            div.querySelector('.browse-source-path').addEventListener('click', function() {
+                const sourcePathInput = this.previousElementSibling;
+                const hostId = sourceHostSelect.value; // Get from the task's source host dropdown
+                openDirectoryBrowser(sourcePathInput, hostId, sourcePathInput.value || '/');
+            });
+            div.querySelector('.browse-destination-path').addEventListener('click', function() {
+                const destPathInput = this.previousElementSibling;
+                const hostId = destinationHostSelect.value; // Get from the task's destination host dropdown
+                openDirectoryBrowser(destPathInput, hostId, destPathInput.value || '/');
             });
             return div;
         }
@@ -2158,6 +2304,154 @@
             });
         }
 
+
+        // --- Directory Browser Logic ---
+        function openDirectoryBrowser(targetInput, hostId, initialPath = '/') {
+            directoryBrowserTargetInput = targetInput;
+            directoryBrowserCurrentHostId = hostId;
+            directoryBrowserSelectedPath = null; // Reset selected file/folder
+
+            const host = currentHosts.find(h => h.id === hostId);
+            const hostAlias = host ? host.alias : 'Unknown Host';
+            directoryBrowserTitle.textContent = `Browse on ${hostAlias}`;
+            
+            directoryBrowserModal.style.display = 'block';
+            fetchAndRenderDirectoryListing(hostId, initialPath.trim() || '/');
+        }
+
+        function closeDirectoryBrowser() {
+            directoryBrowserModal.style.display = 'none';
+            directoryBrowserTargetInput = null;
+            directoryBrowserCurrentHostId = null;
+            directoryBrowserList.innerHTML = ''; // Clear list
+            directoryBrowserSelectedPath = null;
+        }
+
+        async function fetchAndRenderDirectoryListing(hostId, dirPath) {
+            directoryBrowserLoading.style.display = 'block';
+            directoryBrowserList.innerHTML = '';
+            directoryBrowserCurrentPath.textContent = dirPath;
+            directoryBrowserSelectedPath = null; // Clear selection when navigating
+
+            try {
+                const response = await fetch(`/api/hosts/${hostId}/list-directory-contents`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ directoryPath: dirPath })
+                });
+
+                directoryBrowserLoading.style.display = 'none';
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || `HTTP error ${response.status}`);
+                }
+                const entries = await response.json();
+                renderDirectoryEntries(entries, hostId, dirPath);
+            } catch (error) {
+                directoryBrowserLoading.style.display = 'none';
+                directoryBrowserList.innerHTML = `<li style="color:red;">Error: ${escapeHtml(error.message)}</li>`;
+                console.error('Error fetching directory listing:', error);
+            }
+        }
+
+        function renderDirectoryEntries(entries, hostId, currentBasePath) {
+            directoryBrowserList.innerHTML = ''; // Clear previous entries
+
+            // Add ".." for parent directory, unless at root
+            if (currentBasePath !== '/' && currentBasePath !== '') {
+                const parentPath = currentBasePath.substring(0, currentBasePath.lastIndexOf('/')) || '/';
+                const parentLi = document.createElement('li');
+                parentLi.textContent = '⬆️ .. (Parent Directory)';
+                parentLi.dataset.path = parentPath;
+                parentLi.dataset.type = 'parent';
+                parentLi.addEventListener('click', () => fetchAndRenderDirectoryListing(hostId, parentPath));
+                directoryBrowserList.appendChild(parentLi);
+            }
+
+            entries.sort((a, b) => { // Sort: directories first, then by name
+                if (a.type === 'directory' && b.type !== 'directory') return -1;
+                if (a.type !== 'directory' && b.type === 'directory') return 1;
+                return a.name.localeCompare(b.name);
+            });
+
+            entries.forEach(entry => {
+                const li = document.createElement('li');
+                const icon = entry.type === 'directory' ? '📁' : '📄';
+                li.textContent = `${icon} ${escapeHtml(entry.name)}`;
+                li.dataset.path = entry.path; // Full path from server
+                li.dataset.type = entry.type;
+
+                li.addEventListener('click', () => {
+                    // Remove 'selected-item' class from previously selected item
+                    const currentSelected = directoryBrowserList.querySelector('.selected-item');
+                    if (currentSelected) {
+                        currentSelected.classList.remove('selected-item');
+                    }
+
+                    if (entry.type === 'directory') {
+                        fetchAndRenderDirectoryListing(hostId, entry.path);
+                    } else { // file or other
+                        directoryBrowserSelectedPath = entry.path;
+                        li.classList.add('selected-item'); // Highlight selected file
+                        // Update select button text
+                        directoryBrowserSelectBtn.textContent = `Select File: ${escapeHtml(entry.name)}`;
+                    }
+                });
+                directoryBrowserList.appendChild(li);
+            });
+            // Reset select button text if no file is selected (i.e., we just navigated to a dir)
+            if (!directoryBrowserSelectedPath) {
+                 directoryBrowserSelectBtn.textContent = 'Select Current Path';
+            }
+        }
+
+        // Event Listeners for Modal
+        closeDirectoryBrowserBtn.addEventListener('click', closeDirectoryBrowser);
+        directoryBrowserCancelBtn.addEventListener('click', closeDirectoryBrowser);
+
+        directoryBrowserSelectBtn.addEventListener('click', () => {
+            if (directoryBrowserTargetInput) {
+                if (directoryBrowserSelectedPath) { // A file was clicked and selected
+                    directoryBrowserTargetInput.value = directoryBrowserSelectedPath;
+                } else { // No specific file selected, use the current directory path
+                    directoryBrowserTargetInput.value = directoryBrowserCurrentPath.textContent;
+                }
+            }
+            closeDirectoryBrowser();
+        });
+
+        // Close modal if clicked outside of modal-content
+        directoryBrowserModal.addEventListener('click', (event) => {
+            if (event.target === directoryBrowserModal) {
+                closeDirectoryBrowser();
+            }
+        });
+
+        // Event listeners for the new "Browse..." buttons in Automation form
+        const browseAutomationScanPathBtn = document.getElementById('browseAutomationScanPath');
+        if (browseAutomationScanPathBtn) {
+            browseAutomationScanPathBtn.addEventListener('click', () => {
+                const hostId = automationConfigScanHostSelect.value;
+                const currentPath = automationConfigScanPathInput.value;
+                openDirectoryBrowser(automationConfigScanPathInput, hostId, currentPath || '/');
+            });
+        }
+
+        const browseAutomationDestBasePathBtn = document.getElementById('browseAutomationDestBasePath');
+        if (browseAutomationDestBasePathBtn) {
+            browseAutomationDestBasePathBtn.addEventListener('click', () => {
+                // For destination base path, it could be on multiple hosts.
+                // For simplicity, let's assume we browse on the *first selected* destination host.
+                const selectedDestHosts = Array.from(automationConfigDestHostsSelect.selectedOptions).map(opt => opt.value);
+                if (selectedDestHosts.length > 0) {
+                    const hostIdToBrowse = selectedDestHosts[0];
+                    const currentPath = automationConfigDestBasePathInput.value;
+                    openDirectoryBrowser(automationConfigDestBasePathInput, hostIdToBrowse, currentPath || '/');
+                } else {
+                    showMessage('Please select at least one destination host to browse its path.', 'info');
+                }
+            });
+        }
 
         // Initial load
         function escapeHtml(unsafe) {
