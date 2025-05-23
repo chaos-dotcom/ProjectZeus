@@ -1031,6 +1031,22 @@
                             // Normalize path (remove double slashes if any)
                             finalDestinationPath = finalDestinationPath.replace(/\/\//g, '/');
 
+        
+                            // Determine schedule for the auto-generated task based on automation config
+                            let taskScheduleEnabled = false;
+                            let taskScheduleDetails = undefined;
+                            const genSchedule = config.generatedTaskSchedule || 'manual_once';
+                            if (genSchedule === 'hourly') {
+                                taskScheduleEnabled = true;
+                                taskScheduleDetails = '0 * * * *'; // Every hour
+                            } else if (genSchedule === 'daily_4am') {
+                                taskScheduleEnabled = true;
+                                taskScheduleDetails = '0 4 * * *'; // Every day at 4 AM
+                            } else if (genSchedule === 'weekly_mon_4am') {
+                                taskScheduleEnabled = true;
+                                taskScheduleDetails = '0 4 * * 1'; // Every Monday at 4 AM
+                            }
+
 
                             // Ensure sourcePath for rsync has a trailing slash to copy contents, not the folder itself
                             const rsyncSourcePath = parentDir.endsWith('/') ? parentDir : parentDir + '/';
@@ -1068,7 +1084,8 @@
                                 })(),
                                 automationConfigId: config.id, // Link to the automation config
                                 triggerFilePath: triggerFile,    // Link to the specific trigger file
-                                // scheduleEnabled: false, // Typically run once
+                                scheduleEnabled: taskScheduleEnabled,
+                                scheduleDetails: taskScheduleDetails
                             });
                         });
                     }
