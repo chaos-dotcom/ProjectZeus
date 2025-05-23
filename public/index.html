@@ -404,6 +404,42 @@
         .browse-btn:hover {
             background-color: #5a6268;
         }
+
+        /* Autocomplete Styles */
+        .autocomplete-container {
+            position: relative;
+            display: flex; /* To align input and browse button nicely */
+            flex-grow: 1; /* Allow container to grow */
+        }
+        .autocomplete-container input[type="text"] {
+            flex-grow: 1; /* Allow input to grow */
+        }
+        .autocomplete-suggestions {
+            position: absolute;
+            border: 1px solid #ccc;
+            border-top: none;
+            z-index: 999;
+            top: 100%; /* Position below the input */
+            left: 0;
+            right: 0;
+            background-color: white;
+            list-style-type: none;
+            padding: 0;
+            margin: 0;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .autocomplete-suggestions li {
+            padding: 8px 12px;
+            cursor: pointer;
+        }
+        .autocomplete-suggestions li:hover {
+            background-color: #f0f0f0;
+        }
+        .autocomplete-suggestions li.active-suggestion {
+            background-color: #007bff;
+            color: white;
+        }
     </style>
 </head>
 <body>
@@ -469,7 +505,10 @@
                 </div>
                 <div class="form-group">
                     <label for="automationConfigScanPathInput">Scan Directory Path:</label>
-                    <input type="text" id="automationConfigScanPathInput" placeholder="/path/to/scan/recursively" required style="flex-grow:2;">
+                    <div class="autocomplete-container" style="flex-grow:2;">
+                        <input type="text" id="automationConfigScanPathInput" placeholder="/path/to/scan/recursively" required>
+                        <ul class="autocomplete-suggestions" id="automationConfigScanPathSuggestions"></ul>
+                    </div>
                     <button type="button" class="browse-btn" id="browseAutomationScanPath">Browse...</button>
                 </div>
                 <div class="form-group">
@@ -479,7 +518,10 @@
                 </div>
                 <div class="form-group">
                     <label for="automationConfigDestBasePathInput">Destination Base Path:</label>
-                    <input type="text" id="automationConfigDestBasePathInput" placeholder="/path/on/destination/hosts" required style="flex-grow:2;">
+                    <div class="autocomplete-container" style="flex-grow:2;">
+                        <input type="text" id="automationConfigDestBasePathInput" placeholder="/path/on/destination/hosts" required>
+                        <ul class="autocomplete-suggestions" id="automationConfigDestBasePathSuggestions"></ul>
+                    </div>
                     <button type="button" class="browse-btn" id="browseAutomationDestBasePath">Browse...</button>
                 </div>
 
@@ -584,12 +626,8 @@
                 <h4>Paths:</h4>
                 <div id="pathPairsContainer">
                     <!-- Path pairs will be added here by JS -->
-                    <div class="path-pair">
-                        <input type="text" class="source-path" placeholder="Source Path">
-                        <span class="arrow">&rarr;</span>
-                        <input type="text" class="destination-path" placeholder="Destination Path">
-                        <button type="button" class="btn btn-danger remove-path" style="display:none;">&times;</button>
-                    </div>
+                    <!-- Example of how a path-pair's inputs will be wrapped -->
+                    <!-- createPathPairElement will generate this structure -->
                 </div>
                 <button type="button" id="addPathPair" class="btn btn-success" style="margin-top:5px;">Add Path</button>
 
@@ -742,6 +780,185 @@
         let directoryBrowserTargetInput = null; // To store the input element to populate
         let directoryBrowserCurrentHostId = null;
         let directoryBrowserSelectedPath = null; // For selecting a specific file/folder in the list
+
+        // Path Autocompletion Globals / Helper
+        let activeAutocompleter = null; // To manage keyboard events for one autocompleter at a time
+
+        // Debounce function
+        function debounce(func, delay) {
+            let timeout;
+            return function(...args) {
+                const context = this;
+                clearTimeout(timeout);
+                timeout = setTimeout(() => func.apply(context, args), delay);
+            };
+        }
+
+        class PathAutocompleter {
+            constructor(inputElement, hostSelectElement, suggestionsElement, getHostIdCallback) {
+                this.inputElement = inputElement;
+                this.hostSelectElement = hostSelectElement; // Can be null if host is fixed or determined otherwise
+                this.suggestionsElement = suggestionsElement;
+                this.getHostIdCallback = getHostIdCallback; // Function to get the current hostId
+                this.activeSuggestionIndex = -1;
+
+                this.inputElement.addEventListener('input', debounce(this.onInput.bind(this), 300));
+                this.inputElement.addEventListener('keydown', this.onKeyDown.bind(this));
+                this.inputElement.addEventListener('blur', this.onBlur.bind(this));
+                this.suggestionsElement.addEventListener('mousedown', this.onSuggestionClick.bind(this)); // Use mousedown to fire before blur
+            }
+
+            async onInput() {
+                const inputText = this.inputElement.value;
+                if (inputText.length < 1 && !inputText.startsWith('/')) { // Require at least one char or if it's just "/"
+                    this.clearSuggestions();
+                    return;
+                }
+
+                const hostId = this.getHostIdCallback ? this.getHostIdCallback() : (this.hostSelectElement ? this.hostSelectElement.value : null);
+                
+                if (!hostId) {
+                    // console.warn('PathAutocompleter: Host ID not available.');
+                    this.clearSuggestions();
+                    return;
+                }
+                
+                // Special handling for automationConfigDestBasePathInput: only run if 1 host selected
+                if (this.inputElement.id === 'automationConfigDestBasePathInput') {
+                    const destHostsSelect = document.getElementById('automationConfigDestHostsSelect');
+                    if (destHostsSelect && destHostsSelect.selectedOptions.length !== 1) {
+                        this.clearSuggestions();
+                        return; // Don't autocomplete if not exactly one dest host selected
+                    }
+                }
+
+
+                try {
+                    const response = await fetch(`/api/hosts/${hostId}/suggest-path`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ currentInputPath: inputText })
+                    });
+                    if (!response.ok) {
+                        // console.error('Error fetching path suggestions:', response.status);
+                        this.clearSuggestions();
+                        return;
+                    }
+                    const suggestions = await response.json();
+                    this.renderSuggestions(suggestions);
+                } catch (error) {
+                    // console.error('Error in onInput fetching suggestions:', error);
+                    this.clearSuggestions();
+                }
+            }
+
+            renderSuggestions(suggestions) {
+                this.suggestionsElement.innerHTML = '';
+                if (suggestions.length === 0) {
+                    this.suggestionsElement.style.display = 'none';
+                    return;
+                }
+
+                suggestions.forEach((suggestion, index) => {
+                    const li = document.createElement('li');
+                    li.textContent = suggestion;
+                    li.dataset.index = index;
+                    this.suggestionsElement.appendChild(li);
+                });
+                this.suggestionsElement.style.display = 'block';
+                this.activeSuggestionIndex = -1;
+                activeAutocompleter = this; // Set this instance as active
+            }
+
+            onKeyDown(event) {
+                if (this.suggestionsElement.style.display === 'none' || this.suggestionsElement.children.length === 0) {
+                    if (event.key === "ArrowDown" || event.key === "ArrowUp") { // If suggestions not visible, try to trigger them
+                        this.onInput();
+                    }
+                    return;
+                }
+
+                const suggestionsCount = this.suggestionsElement.children.length;
+
+                switch (event.key) {
+                    case 'ArrowDown':
+                        event.preventDefault();
+                        this.activeSuggestionIndex = (this.activeSuggestionIndex + 1) % suggestionsCount;
+                        this.updateActiveSuggestion();
+                        break;
+                    case 'ArrowUp':
+                        event.preventDefault();
+                        this.activeSuggestionIndex = (this.activeSuggestionIndex - 1 + suggestionsCount) % suggestionsCount;
+                        this.updateActiveSuggestion();
+                        break;
+                    case 'Enter':
+                        event.preventDefault();
+                        if (this.activeSuggestionIndex > -1) {
+                            this.selectSuggestion(this.suggestionsElement.children[this.activeSuggestionIndex].textContent);
+                        } else {
+                            // If enter is pressed without a suggestion selected, just hide suggestions
+                            this.clearSuggestions();
+                        }
+                        break;
+                    case 'Escape':
+                        event.preventDefault();
+                        this.clearSuggestions();
+                        break;
+                }
+            }
+
+            updateActiveSuggestion() {
+                Array.from(this.suggestionsElement.children).forEach((li, index) => {
+                    li.classList.toggle('active-suggestion', index === this.activeSuggestionIndex);
+                    if (index === this.activeSuggestionIndex) {
+                        li.scrollIntoView({ block: 'nearest' });
+                    }
+                });
+            }
+            
+            onSuggestionClick(event) {
+                if (event.target.tagName === 'LI') {
+                    this.selectSuggestion(event.target.textContent);
+                }
+            }
+
+            selectSuggestion(suggestionText) {
+                this.inputElement.value = suggestionText;
+                this.clearSuggestions();
+                this.inputElement.focus(); // Return focus to input
+                 // Trigger an 'input' or 'change' event if other parts of the app need to react
+                const inputEvent = new Event('input', { bubbles: true, cancelable: true });
+                this.inputElement.dispatchEvent(inputEvent);
+                const changeEvent = new Event('change', { bubbles: true, cancelable: true });
+                this.inputElement.dispatchEvent(changeEvent);
+            }
+
+            clearSuggestions() {
+                this.suggestionsElement.innerHTML = '';
+                this.suggestionsElement.style.display = 'none';
+                this.activeSuggestionIndex = -1;
+                if (activeAutocompleter === this) {
+                    activeAutocompleter = null;
+                }
+            }
+            
+            onBlur() {
+                // Delay hiding suggestions to allow click on suggestion to register
+                setTimeout(() => {
+                    if (!this.suggestionsElement.contains(document.activeElement) && !(document.activeElement === this.inputElement) ) {
+                         // Check if the focus moved to a browse button associated with this input
+                        let parent = this.inputElement.parentElement;
+                        let browseButton = null;
+                        if (parent && parent.classList.contains('autocomplete-container')) {
+                            browseButton = parent.nextElementSibling; // Assuming browse button is immediate sibling of container
+                        }
+                        if (!browseButton || (browseButton && document.activeElement !== browseButton)) {
+                           this.clearSuggestions();
+                        }
+                    }
+                }, 150);
+            }
+        }
 
         // Tab Navigation Elements
         const navLinks = document.querySelectorAll('nav a[data-tab]');
@@ -1846,17 +2063,67 @@
         }
         
         function createPathPairElement() {
-            const div = document.createElement('div');
-            div.className = 'path-pair';
-            div.innerHTML = `
-                <input type="text" class="source-path" placeholder="Source Path">
-                <button type="button" class="browse-btn browse-source-path">Browse...</button>
-                <span class="arrow">&rarr;</span>
-                <input type="text" class="destination-path" placeholder="Destination Path">
-                <button type="button" class="browse-btn browse-destination-path">Browse...</button>
-                <button type="button" class="btn btn-danger remove-path">&times;</button>
-            `;
-            div.querySelector('.remove-path').addEventListener('click', () => {
+            const pathPairDiv = document.createElement('div');
+            pathPairDiv.className = 'path-pair';
+
+            // Source Path with Autocomplete
+            const sourceContainer = document.createElement('div');
+            sourceContainer.className = 'autocomplete-container';
+            const sourcePathInput = document.createElement('input');
+            sourcePathInput.type = 'text';
+            sourcePathInput.className = 'source-path';
+            sourcePathInput.placeholder = 'Source Path';
+            const sourceSuggestions = document.createElement('ul');
+            sourceSuggestions.className = 'autocomplete-suggestions';
+            sourceContainer.appendChild(sourcePathInput);
+            sourceContainer.appendChild(sourceSuggestions);
+
+            const browseSourceBtn = document.createElement('button');
+            browseSourceBtn.type = 'button';
+            browseSourceBtn.className = 'browse-btn browse-source-path';
+            browseSourceBtn.textContent = 'Browse...';
+
+            // Arrow
+            const arrowSpan = document.createElement('span');
+            arrowSpan.className = 'arrow';
+            arrowSpan.innerHTML = '&rarr;';
+
+            // Destination Path with Autocomplete
+            const destContainer = document.createElement('div');
+            destContainer.className = 'autocomplete-container';
+            const destPathInput = document.createElement('input');
+            destPathInput.type = 'text';
+            destPathInput.className = 'destination-path';
+            destPathInput.placeholder = 'Destination Path';
+            const destSuggestions = document.createElement('ul');
+            destSuggestions.className = 'autocomplete-suggestions';
+            destContainer.appendChild(destPathInput);
+            destContainer.appendChild(destSuggestions);
+
+            const browseDestBtn = document.createElement('button');
+            browseDestBtn.type = 'button';
+            browseDestBtn.className = 'browse-btn browse-destination-path';
+            browseDestBtn.textContent = 'Browse...';
+            
+            // Remove Button
+            const removeBtn = document.createElement('button');
+            removeBtn.type = 'button';
+            removeBtn.className = 'btn btn-danger remove-path';
+            removeBtn.innerHTML = '&times;';
+
+            pathPairDiv.appendChild(sourceContainer);
+            pathPairDiv.appendChild(browseSourceBtn);
+            pathPairDiv.appendChild(arrowSpan);
+            pathPairDiv.appendChild(destContainer);
+            pathPairDiv.appendChild(browseDestBtn);
+            pathPairDiv.appendChild(removeBtn);
+            
+            // Initialize Autocompleters for this path pair
+            new PathAutocompleter(sourcePathInput, null, sourceSuggestions, () => sourceHostSelect.value);
+            new PathAutocompleter(destPathInput, null, destSuggestions, () => destinationHostSelect.value);
+
+
+            removeBtn.addEventListener('click', () => {
                 // Only remove if more than one path pair exists
                 if (pathPairsContainer.querySelectorAll('.path-pair').length > 1) {
                     div.remove();
@@ -1889,7 +2156,18 @@
         });
         
         // Initial path pair - ensure its remove button is hidden if it's the only one
-        pathPairsContainer.querySelector('.remove-path').style.display = 'none';
+        // This is now handled by the logic in addPathPairButton click and initial creation.
+        // Update display of remove buttons after any add/initial create
+        function updateRemovePathButtonVisibility() {
+            const allPathPairs = pathPairsContainer.querySelectorAll('.path-pair');
+            allPathPairs.forEach(pp => {
+                 const removeButton = pp.querySelector('.remove-path');
+                 if (removeButton) {
+                    removeButton.style.display = allPathPairs.length > 1 ? 'inline-block' : 'none';
+                 }
+            });
+        }
+        updateRemovePathButtonVisibility(); // Call after initial path pair is added
 
 
         scheduleOnBtn.addEventListener('click', () => {
@@ -1926,8 +2204,9 @@
 
             // Reset path pairs to one empty
             pathPairsContainer.innerHTML = '';
-            pathPairsContainer.appendChild(createPathPairElement());
-            pathPairsContainer.querySelector('.remove-path').style.display = 'none';
+            const newFirstPathPair = createPathPairElement();
+            pathPairsContainer.appendChild(newFirstPathPair);
+            updateRemovePathButtonVisibility(); // Ensures its remove button is hidden
             
             // Reset flag buttons
             flagsButtonContainer.querySelectorAll('.flag-btn.active').forEach(button => {
@@ -2000,6 +2279,7 @@
             } else {
                 scheduleOffBtn.click();
             }
+            updateRemovePathButtonVisibility(); // Update remove buttons based on loaded paths
             // Scroll to the top of the form for better UX
             taskEditorFormContainer.scrollIntoView({ behavior: 'smooth' });
         }
@@ -2472,13 +2752,28 @@
             
             // Set initial active tab (Tasks)
             setActiveTab('tasks');
+            
+            // Initialize autocompleters for static fields
+            new PathAutocompleter(
+                automationConfigScanPathInput, 
+                automationConfigScanHostSelect, 
+                document.getElementById('automationConfigScanPathSuggestions'),
+                () => automationConfigScanHostSelect.value // Provide host ID via callback
+            );
+            new PathAutocompleter(
+                automationConfigDestBasePathInput, 
+                automationConfigDestHostsSelect, // This is a multi-select, special handling in PathAutocompleter
+                document.getElementById('automationConfigDestBasePathSuggestions'),
+                () => { // Callback to get host ID for automation destination base path
+                    const selectedOptions = automationConfigDestHostsSelect.selectedOptions;
+                    if (selectedOptions.length === 1) {
+                        return selectedOptions[0].value;
+                    }
+                    return null; // No autocompletion if 0 or >1 hosts selected
+                }
+            );
 
-
-            // Ensure the first path pair's remove button is hidden in task form
-            const firstPathPair = pathPairsContainer.querySelector('.path-pair .remove-path');
-            if (firstPathPair) {
-                firstPathPair.style.display = 'none';
-            }
+            updateRemovePathButtonVisibility(); // Ensure correct visibility on load
         });
     </script>
 </body>

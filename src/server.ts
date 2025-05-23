@@ -1298,6 +1298,94 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
 });
 
+// --- Path Autocompletion API Endpoint ---
+app.post('/api/hosts/:hostId/suggest-path', async (req, res) => {
+  const { hostId } = req.params;
+  const { currentInputPath } = req.body;
+
+  if (typeof currentInputPath !== 'string') {
+    return res.status(400).json({ message: 'currentInputPath (string) is required in the request body.' });
+  }
+
+  const host = hosts.find(h => h.id === hostId);
+  if (!host) {
+    return res.status(404).json({ message: 'Host not found.' });
+  }
+
+  try {
+    let dirToList: string;
+    let prefix: string;
+
+    if (currentInputPath === '' || currentInputPath === '/') {
+      dirToList = '/';
+      prefix = '';
+    } else if (currentInputPath.endsWith('/')) {
+      dirToList = currentInputPath;
+      prefix = '';
+    } else {
+      // path.dirname will return '.' if currentInputPath is like 'filename' (no slashes)
+      // and '/' if currentInputPath is like '/filename'
+      let tempDirName = path.dirname(currentInputPath);
+      if (tempDirName === '.' && !currentInputPath.includes('/')) { // e.g. "myf"
+          // Assume current directory or root based on context.
+          // For simplicity, let's assume root if no slash.
+          // Or, if you want to list from where the user is, you might need more context.
+          // For now, let's treat "myf" as trying to list from root.
+          dirToList = '/'; // Or some default like user's home if known and applicable
+          prefix = currentInputPath;
+      } else if (tempDirName === '.' && currentInputPath.startsWith('./')) { // e.g. "./myf"
+          dirToList = '.'; // Or resolve to an actual path
+          prefix = path.basename(currentInputPath);
+      }
+      else {
+        dirToList = tempDirName;
+        prefix = path.basename(currentInputPath);
+      }
+    }
+    
+    // Ensure dirToList is absolute if it's not explicitly relative like '.'
+    if (dirToList !== '.' && !path.isAbsolute(dirToList) && host.id === 'localhost') {
+        // This logic might be too simplistic for remote hosts or complex local setups.
+        // For now, if it's not clearly absolute for localhost, default to root.
+        // This might need refinement based on expected user input patterns.
+        // dirToList = '/'; // Reconsidering this, path.dirname usually handles it well.
+    }
+    if (dirToList === '') dirToList = '/'; // Ensure dirname of "file" doesn't become empty string
+
+    const entries = await listDirectoryContents(host, dirToList);
+    
+    const suggestions = entries
+      .filter(entry => entry.name.toLowerCase().startsWith(prefix.toLowerCase()))
+      .map(entry => {
+        // Construct the full path for the suggestion
+        // Ensure no double slashes if dirToList is '/'
+        let suggestedPath = (dirToList === '/' ? '/' : dirToList + '/') + entry.name;
+        suggestedPath = suggestedPath.replace(/\/\//g, '/'); // Normalize double slashes
+
+        if (entry.type === 'directory') {
+          return suggestedPath + '/';
+        }
+        return suggestedPath;
+      })
+      .slice(0, 15); // Limit to 15 suggestions
+
+    res.json(suggestions);
+
+  } catch (error: any) {
+    // If listDirectoryContents throws an error (e.g., path doesn't exist),
+    // it's often not a server error but an invalid user path.
+    // Return empty suggestions or a specific error message.
+    if (error.message && (error.message.includes('No such file or directory') || error.message.includes('Failed to list'))) {
+        // console.warn(`Path suggestion error (likely invalid base path "${dirToList}"): ${error.message}`);
+        res.json([]); // Send empty array if base path is invalid
+    } else {
+        console.error(`Error in suggest-path endpoint for host ${hostId}, path "${currentInputPath}":`, error);
+        res.status(500).json({ message: error.message || 'An unexpected error occurred during path suggestion.' });
+    }
+  }
+});
+
+
 // In src/server.ts, add this new async function:
 async function runAutomationScanServerSide(configId: string) {
     const startTimeForLog = new Date().toISOString();
