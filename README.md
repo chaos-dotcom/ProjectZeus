@@ -191,6 +191,10 @@ The server exposes the following API endpoints:
     *   Description: Deletes a specific task.
     *   Response: `204 No Content`.
 
+*   **`DELETE /api/tasks/delete-all`**
+    *   Description: Deletes all configured tasks.
+    *   Response: `200 OK` with success message, or `204 No Content`.
+
 *   **`POST /api/tasks/:taskId/run`**
     *   Description: Executes a specific task.
     *   Response: `200 OK` (or `500` if errors occurred) - JSON object with execution results.

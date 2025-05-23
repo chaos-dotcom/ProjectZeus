@@ -436,7 +436,8 @@
         </div>
 
         <div style="margin-bottom: 15px; text-align: right;">
-            <button id="runAllTasksBtn" class="btn btn-info" style="background-color: #17a2b8; color:white;">Run All Tasks</button>
+            <button id="runAllTasksBtn" class="btn btn-info" style="background-color: #17a2b8; color:white; margin-right: 5px;">Run All Tasks</button>
+            <button id="deleteAllTasksBtn" class="btn btn-danger">Delete All Tasks</button>
         </div>
         <h3>Current Tasks:</h3>
         <div id="tasksList">
@@ -1622,6 +1623,8 @@
         taskForm.addEventListener('submit', handleSaveTask);
         
         const runAllTasksBtn = document.getElementById('runAllTasksBtn');
+        const deleteAllTasksBtn = document.getElementById('deleteAllTasksBtn');
+
         if (runAllTasksBtn) {
             runAllTasksBtn.addEventListener('click', async () => {
                 if (!confirm('Are you sure you want to run ALL tasks?')) return;
@@ -1646,6 +1649,35 @@
                 } finally {
                     runAllTasksBtn.textContent = 'Run All Tasks';
                     runAllTasksBtn.disabled = false;
+                }
+            });
+        }
+
+        if (deleteAllTasksBtn) {
+            deleteAllTasksBtn.addEventListener('click', async () => {
+                if (!confirm('Are you sure you want to delete ALL tasks? This action cannot be undone.')) return;
+
+                deleteAllTasksBtn.textContent = 'Deleting All...';
+                deleteAllTasksBtn.disabled = true;
+                try {
+                    const response = await fetch('/api/tasks/delete-all', { method: 'DELETE' });
+                    if (!response.ok) {
+                        let errorMsg = 'Failed to delete all tasks.';
+                        try {
+                            const errorData = await response.json();
+                            errorMsg = errorData.message || errorMsg;
+                        } catch (e) { /* Ignore if response is not JSON */ }
+                        throw new Error(errorMsg);
+                    }
+                    // const result = await response.json(); // DELETE usually returns 204 No Content or a success message
+                    showMessage('All tasks deleted successfully.', 'success');
+                    fetchAndRenderTasks(); // Refresh the tasks list
+                } catch (error) {
+                    console.error('Error deleting all tasks:', error);
+                    showMessage(`Error deleting all tasks: ${error.message}`, 'error');
+                } finally {
+                    deleteAllTasksBtn.textContent = 'Delete All Tasks';
+                    deleteAllTasksBtn.disabled = false;
                 }
             });
         }
