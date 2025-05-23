@@ -279,6 +279,37 @@
         .job-history-details h5 { margin-top: 0; margin-bottom: 5px; }
         .job-history-details .path-pair-log { margin-bottom: 10px; }
         .job-history-details .path-pair-log p { margin: 2px 0; }
+
+        /* Styles for expandable task command details */
+        .task-item-summary {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            /* padding is inherited from .task-item, or add specific if needed */
+        }
+        .task-item-summary > span { /* Task name */
+            flex-grow: 1;
+        }
+        .task-details {
+            padding: 10px 15px;
+            background-color: #f0f0f0; /* Slightly different background */
+            border-top: 1px solid #ddd;
+            display: none; /* Hidden by default */
+        }
+        .task-details pre {
+            background-color: #282c34; /* Same as job history logs */
+            color: #abb2bf;
+            padding: 10px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            word-break: break-all;
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+            font-size: 0.85em;
+            margin-top: 5px;
+        }
+        .task-details h5 { margin-top: 0; margin-bottom: 5px; }
+        .task-details p:first-child { margin-top: 0; } /* For "Loading command..." */
     </style>
 </head>
 <body>
@@ -1544,25 +1575,75 @@
             }
             tasks.forEach(task => {
                 const taskItem = document.createElement('div');
-                taskItem.className = 'task-item';
+                taskItem.className = 'task-item'; // Keep this for overall item styling
                 taskItem.innerHTML = `
-                    <span>${task.name}</span>
-                    <div>
-                        <button class="btn btn-sm btn-success run-task-btn" data-id="${task.id}" style="margin-right: 5px;">Run</button>
-                        <!-- Edit button will load task into form later -->
-                        <button class="btn btn-sm btn-primary edit-task-btn" data-id="${task.id}" style="margin-right: 5px;">Edit</button>
-                        <button class="btn btn-sm btn-danger delete-task" data-id="${task.id}">Delete</button>
+                    <div class="task-item-summary">
+                        <span>${escapeHtml(task.name)}</span>
+                        <div>
+                            <button class="btn btn-sm btn-success run-task-btn" data-id="${task.id}" style="margin-right: 5px;">Run</button>
+                            <button class="btn btn-sm btn-primary edit-task-btn" data-id="${task.id}" style="margin-right: 5px;">Edit</button>
+                            <button class="btn btn-sm btn-danger delete-task" data-id="${task.id}">Delete</button>
+                        </div>
+                    </div>
+                    <div class="task-details" data-task-id="${task.id}">
+                        <p>Loading command...</p>
                     </div>
                 `;
+
+                const summaryElement = taskItem.querySelector('.task-item-summary');
+                const detailsElement = taskItem.querySelector('.task-details');
+
+                summaryElement.addEventListener('click', async (event) => {
+                    // Prevent click on buttons inside summary from toggling details
+                    if (event.target.tagName === 'BUTTON' || event.target.closest('button')) {
+                        return;
+                    }
+
+                    const isHidden = detailsElement.style.display === 'none' || detailsElement.style.display === '';
+                    if (isHidden) {
+                        detailsElement.style.display = 'block';
+                        if (!detailsElement.dataset.loaded) {
+                            detailsElement.innerHTML = '<p>Loading command...</p>'; // Reset to loading message
+                            try {
+                                const response = await fetch(`/api/tasks/${task.id}/command`);
+                                if (!response.ok) {
+                                    let errorMsg = `HTTP error ${response.status}`;
+                                    try {
+                                        const errorData = await response.json();
+                                        errorMsg = errorData.message || errorMsg;
+                                    } catch (e) { /* ignore if error response not json */ }
+                                    throw new Error(errorMsg);
+                                }
+                                const data = await response.json();
+                                let detailsHtml = `<h4>Commands for: ${escapeHtml(data.taskName)}</h4>`;
+                                if (data.commands && data.commands.length > 0) {
+                                    data.commands.forEach((cmdDetail, index) => {
+                                        detailsHtml += `
+                                            <h5>Path Pair ${index + 1}: ${escapeHtml(cmdDetail.pathPair.source)} &rarr; ${escapeHtml(cmdDetail.pathPair.destination)}</h5>
+                                            <pre>${escapeHtml(cmdDetail.command)}</pre>
+                                        `;
+                                    });
+                                } else {
+                                    detailsHtml += '<p>No commands found or an error occurred constructing them.</p>';
+                                }
+                                detailsElement.innerHTML = detailsHtml;
+                                detailsElement.dataset.loaded = 'true';
+                            } catch (error) {
+                                console.error('Error fetching task command:', error);
+                                detailsElement.innerHTML = `<p style="color:red;">Error loading command: ${escapeHtml(error.message)}</p>`;
+                            }
+                        }
+                    } else {
+                        detailsElement.style.display = 'none';
+                    }
+                });
 
                 taskItem.querySelector('.edit-task-btn').addEventListener('click', () => {
                     loadTaskIntoForm(task);
                 });
-                
+            
                 taskItem.querySelector('.delete-task').addEventListener('click', async function() { // Use function for 'this'
-                    const taskId = this.dataset.id; // task.id is on the button's dataset
-                    // To get task.name, we might need to find it or pass it if 'task' is not in scope here
-                    // Assuming 'task' from the forEach IS in scope for task.name
+                    const taskId = this.dataset.id;
                     const taskName = task.name; 
 
                     if (this.dataset.confirming === 'true') {
@@ -2079,6 +2160,16 @@
 
 
         // Initial load
+        function escapeHtml(unsafe) {
+            if (typeof unsafe !== 'string') return '';
+            return unsafe
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
             initializeFlagButtons(); // For task form
             fetchAndRenderHosts();   // Fetch hosts first to populate dropdowns for all relevant forms

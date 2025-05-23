@@ -896,6 +896,107 @@ app.put('/api/tasks/:taskId', async (req, res) => {
 
 
 // --- Rsync Task Execution ---
+
+// New helper function to construct the rsync command
+async function constructRsyncCommandForPathPair(
+    task: Task,
+    pathPair: PathPair,
+    hostsList: Host[],
+    forDisplayOnly: boolean // If true, skip side-effects like touching files
+): Promise<string> {
+    const sourceHostObj = hostsList.find(h => h.id === task.sourceHost);
+    const destinationHostObj = hostsList.find(h => h.id === task.destinationHost);
+
+    if (!sourceHostObj || !destinationHostObj) {
+        // This case should ideally be caught before calling, but as a safeguard:
+        throw new Error('Source or destination host not found during command construction.');
+    }
+
+    const privateKeyPath = path.join(os.homedir(), '.ssh', 'websync_id_rsa');
+    // No fs.existsSync check here for forDisplayOnly, as we're just constructing the command.
+    // The actual execution will depend on the key.
+
+    let sourceArg = pathPair.source;
+    if (sourceHostObj.id !== 'localhost') {
+        sourceArg = `${sourceHostObj.user}@${sourceHostObj.hostname}:${pathPair.source}`;
+    }
+
+    let destinationArg = pathPair.destination;
+    if (destinationHostObj.id !== 'localhost') {
+        destinationArg = `${destinationHostObj.user}@${destinationHostObj.hostname}:${pathPair.destination}`;
+    }
+
+    let sshPortForRsync: number | undefined;
+    if (destinationHostObj.id !== 'localhost' && destinationHostObj.port) {
+        sshPortForRsync = destinationHostObj.port;
+    } else if (sourceHostObj.id !== 'localhost' && sourceHostObj.port) {
+        sshPortForRsync = sourceHostObj.port;
+    }
+
+    const rsyncSshCommand = `ssh -i "${privateKeyPath}" ${sshPortForRsync ? `-p ${sshPortForRsync}` : ''} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes`;
+    
+    let finalFlags = [...task.flags]; // Start with task's flags
+
+    if (task.automationConfigId) {
+        const automationConfig = automationConfigs.find(ac => ac.id === task.automationConfigId);
+        if (automationConfig && automationConfig.type === 'turbosort') {
+            const projectName = path.basename(pathPair.source.endsWith('/') ? pathPair.source.slice(0, -1) : pathPair.source);
+            const excludeFilePathOnSource = path.join(pathPair.source, `.${projectName}_processed.txt`);
+            
+            if (!forDisplayOnly) { // Only attempt to touch if actually executing
+                const touchCommand = `touch '${excludeFilePathOnSource.replace(/'/g, "'\\''")}'`;
+                let commandToTouchFile = touchCommand;
+                const sourceHostForTouch = hostsList.find(h => h.id === task.sourceHost);
+
+                if (sourceHostForTouch && sourceHostForTouch.id !== 'localhost') {
+                    const sshPortOption = sourceHostForTouch.port ? `-p ${sourceHostForTouch.port}` : '';
+                    commandToTouchFile = `ssh -i "${privateKeyPath}" ${sshPortOption} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes ${sourceHostForTouch.user}@${sourceHostForTouch.hostname} "${touchCommand.replace(/"/g, '\\"')}"`;
+                }
+                
+                console.log(`[Rsync Exec] Ensuring exclude file exists on ${sourceHostForTouch?.alias || 'localhost'}: ${commandToTouchFile.split(' ')[0]} ...`);
+                try {
+                    await new Promise<void>((resolveTouch, rejectTouch) => {
+                        exec(commandToTouchFile, (touchError, touchStdout, touchStderr) => {
+                            if (touchError) {
+                                console.error(`[Rsync Exec] Failed to touch exclude file ${excludeFilePathOnSource} on ${sourceHostForTouch?.alias || 'localhost'}: ${touchStderr || touchError.message}`);
+                            } else {
+                                console.log(`[Rsync Exec] Successfully ensured exclude file ${excludeFilePathOnSource} exists on ${sourceHostForTouch?.alias || 'localhost'}`);
+                            }
+                            resolveTouch(); 
+                        });
+                    });
+                } catch (e) {
+                    console.error(`[Rsync Exec] Error during pre-rsync touch of exclude file for task ${task.name}:`, e);
+                }
+            }
+            finalFlags.push(`--exclude-from='${excludeFilePathOnSource.replace(/'/g, "'\\''")}'`);
+            if (!finalFlags.includes('--itemize-changes')) {
+                finalFlags.push('--itemize-changes');
+            }
+        }
+    }
+    const effectiveFlagsString = finalFlags.join(' ');
+    let rsyncCommand: string;
+
+    if (sourceHostObj.id !== 'localhost' && destinationHostObj.id !== 'localhost') {
+        if (sourceHostObj.id === destinationHostObj.id) {
+            const remoteLocalRsyncCommand = `rsync ${effectiveFlagsString} '${pathPair.source.replace(/'/g, "'\\''")}' '${pathPair.destination.replace(/'/g, "'\\''")}'`;
+            const sshPortOption = sourceHostObj.port ? `-p ${sourceHostObj.port}` : '';
+            rsyncCommand = `ssh -i "${privateKeyPath}" ${sshPortOption} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes ${sourceHostObj.user}@${sourceHostObj.hostname} "${remoteLocalRsyncCommand.replace(/"/g, '\\"')}"`;
+        } else {
+            const rhaToRhbSshCommandForRsync = `ssh${destinationHostObj.port ? ` -p ${destinationHostObj.port}` : ''}`;
+            const remoteRsyncCommand = `rsync ${effectiveFlagsString} -e '${rhaToRhbSshCommandForRsync.replace(/'/g, "'\\''")}' '${pathPair.source.replace(/'/g, "'\\''")}' '${destinationHostObj.user}@${destinationHostObj.hostname}:${pathPair.destination.replace(/'/g, "'\\''")}'`;
+            const outerSshPortOption = sourceHostObj.port ? `-p ${sourceHostObj.port}` : '';
+            rsyncCommand = `ssh -i "${privateKeyPath}" ${outerSshPortOption} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes ${sourceHostObj.user}@${sourceHostObj.hostname} "${remoteRsyncCommand.replace(/"/g, '\\"')}"`;
+        }
+    } else if (sourceHostObj.id !== 'localhost' || destinationHostObj.id !== 'localhost') {
+        rsyncCommand = `rsync ${effectiveFlagsString} -e 'ssh ${rsyncSshCommand.substring(4)}' "${sourceArg}" "${destinationArg}"`;
+    } else {
+        rsyncCommand = `rsync ${effectiveFlagsString} "${sourceArg}" "${destinationArg}"`;
+    }
+    return rsyncCommand;
+}
+
 interface RsyncExecutionResult {
   pathPair: PathPair;
   success: boolean;
@@ -905,138 +1006,31 @@ interface RsyncExecutionResult {
 }
 
 async function executeRsyncCommand(task: Task, pathPair: PathPair, hostsList: Host[]): Promise<RsyncExecutionResult> {
-  const sourceHostObj = hostsList.find(h => h.id === task.sourceHost);
-  const destinationHostObj = hostsList.find(h => h.id === task.destinationHost);
-
-  if (!sourceHostObj || !destinationHostObj) {
-    return { pathPair, success: false, stdout: '', stderr: 'Source or destination host not found.', command: '' };
-  }
-
-  const privateKeyPath = path.join(os.homedir(), '.ssh', 'websync_id_rsa');
-  if (!fs.existsSync(privateKeyPath)) {
-    // This key is essential for remote operations.
-    // The ssh-copy-id feature should have created it. If not, remote rsync will fail.
-    console.warn(`SSH private key ${privateKeyPath} not found. Remote rsync operations will likely fail.`);
-    // For localhost-to-localhost, this key isn't strictly needed by rsync itself, but good to be aware.
-  }
-
-  let sourceArg = pathPair.source;
-  if (sourceHostObj.id !== 'localhost') {
-    sourceArg = `${sourceHostObj.user}@${sourceHostObj.hostname}:${pathPair.source}`;
-  }
-
-  let destinationArg = pathPair.destination;
-  if (destinationHostObj.id !== 'localhost') {
-    destinationArg = `${destinationHostObj.user}@${destinationHostObj.hostname}:${pathPair.destination}`;
-  }
-
-  let sshPortForRsync: number | undefined;
-  if (destinationHostObj.id !== 'localhost' && destinationHostObj.port) {
-    sshPortForRsync = destinationHostObj.port;
-  } else if (sourceHostObj.id !== 'localhost' && sourceHostObj.port) {
-    sshPortForRsync = sourceHostObj.port;
-  }
-
-  const rsyncSshCommand = `ssh -i "${privateKeyPath}" ${sshPortForRsync ? `-p ${sshPortForRsync}` : ''} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes`;
-  
-  const flagsString = task.flags.join(' ');
   let rsyncCommand: string;
-  let finalFlags = [...task.flags]; // Start with task's flags
-
-  // Check if this task is from a .turbosort automation and needs an exclude file
-  if (task.automationConfigId) {
-    const automationConfig = automationConfigs.find(ac => ac.id === task.automationConfigId);
-    
-    // --- SERVER-SIDE DEBUGGING for --exclude-from ---
-    console.log(`[Rsync Exec] Task ID: ${task.id}, AutomationConfigID: ${task.automationConfigId}`);
-    if (automationConfig) {
-      console.log(`[Rsync Exec] Found AutomationConfig: ID=${automationConfig.id}, Type=${automationConfig.type}, ProcessedLogFile=${automationConfig.processedLogFile}, ScanPath=${automationConfig.scanDirectoryPath}`);
-    } else {
-      console.log(`[Rsync Exec] No AutomationConfig found for ID: ${task.automationConfigId}`);
-    }
-    // --- END SERVER-SIDE DEBUGGING ---
-
-    if (automationConfig && automationConfig.type === 'turbosort') {
-      // Extract project name from the source path
-      const projectName = path.basename(pathPair.source.endsWith('/') ? pathPair.source.slice(0, -1) : pathPair.source);
-      
-      // Place the exclude file inside the project folder itself
-      // The path is constructed using sourcePath (pathPair.source) and projectFolderName (projectName)
-      let excludeFilePathOnSource = path.join(pathPair.source, `.${projectName}_processed.txt`);
-      
-      // For debugging
-      console.log(`[Rsync Exec] Using project-specific exclude file: ${excludeFilePathOnSource} for project: ${projectName}`);
-      
-      // --- Ensure the exclude file exists on the source host BEFORE rsync ---
-      const touchCommand = `touch '${excludeFilePathOnSource.replace(/'/g, "'\\''")}'`;
-      let commandToTouchFile = touchCommand;
-      const sourceHostForTouch = hosts.find(h => h.id === task.sourceHost); // Get source host object
-
-      if (sourceHostForTouch && sourceHostForTouch.id !== 'localhost') {
-        const sshPortOption = sourceHostForTouch.port ? `-p ${sourceHostForTouch.port}` : '';
-        commandToTouchFile = `ssh -i "${privateKeyPath}" ${sshPortOption} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes ${sourceHostForTouch.user}@${sourceHostForTouch.hostname} "${touchCommand.replace(/"/g, '\\"')}"`;
-      }
-      
-      console.log(`[Rsync Exec] Ensuring exclude file exists on ${sourceHostForTouch?.alias || 'localhost'}: ${commandToTouchFile.split(' ')[0]} ...`);
-      try {
-        await new Promise<void>((resolveTouch, rejectTouch) => {
-          exec(commandToTouchFile, (touchError, touchStdout, touchStderr) => {
-            if (touchError) {
-              // Log the error but proceed; rsync will fail if it can't read it, but at least we tried.
-              console.error(`[Rsync Exec] Failed to touch exclude file ${excludeFilePathOnSource} on ${sourceHostForTouch?.alias || 'localhost'}: ${touchStderr || touchError.message}`);
+  try {
+    rsyncCommand = await constructRsyncCommandForPathPair(task, pathPair, hostsList, false); // forDisplayOnly = false
+    if (task.sourceHost && task.destinationHost) { // Check if hosts are defined before logging
+        const sourceHostObj = hostsList.find(h => h.id === task.sourceHost);
+        const destinationHostObj = hostsList.find(h => h.id === task.destinationHost);
+        if (sourceHostObj && destinationHostObj) {
+            if (sourceHostObj.id !== 'localhost' && destinationHostObj.id !== 'localhost') {
+                if (sourceHostObj.id === destinationHostObj.id) {
+                    console.log(`Executing remote-to-same-remote rsync (on ${sourceHostObj.alias}): ${rsyncCommand.split(' ')[0]} ... details in task log`);
+                } else {
+                    console.log(`Executing remote-to-different-remote rsync (WSS -> ${sourceHostObj.alias} -> ${destinationHostObj.alias}): ${rsyncCommand.split(' ')[0]} ... details in task log`);
+                }
+            } else if (sourceHostObj.id !== 'localhost' || destinationHostObj.id !== 'localhost') {
+                console.log(`Executing rsync (local involved): ${rsyncCommand.split(' ')[0]} ... details in task log`);
             } else {
-              console.log(`[Rsync Exec] Successfully ensured exclude file ${excludeFilePathOnSource} exists on ${sourceHostForTouch?.alias || 'localhost'}`);
+                console.log(`Executing rsync (local-to-local): ${rsyncCommand.split(' ')[0]} ... details in task log`);
             }
-            resolveTouch(); 
-          });
-        });
-      } catch (e) {
-        console.error(`[Rsync Exec] Error during pre-rsync touch of exclude file for task ${task.name}:`, e);
-      }
-      // --- End ensure exclude file exists ---
-
-      // Add the exclude-from flag
-      finalFlags.push(`--exclude-from='${excludeFilePathOnSource.replace(/'/g, "'\\''")}'`);
-      
-      // Add itemize-changes flag if not already present - this provides structured output of changed files
-      if (!finalFlags.includes('--itemize-changes')) {
-        finalFlags.push('--itemize-changes');
-      }
-      console.log(`[Rsync Exec] ADDED --exclude-from and --itemize-changes (if needed) for turbosort task ${task.id}`); // DEBUG
-    } else {
-      // Updated log message to reflect that the main condition for not adding is not being a turbosort task,
-      // or automationConfig not being found.
-      console.log(`[Rsync Exec] DID NOT add --exclude-from for task ${task.id}. Conditions: automationConfig found=${!!automationConfig}, type=${automationConfig?.type}`); // DEBUG
+        }
     }
+  } catch (constructionError: any) {
+    console.error(`Error constructing rsync command for task ${task.name}: ${constructionError.message}`);
+    return { pathPair, success: false, stdout: '', stderr: `Command construction failed: ${constructionError.message}`, command: 'N/A' };
   }
-  const effectiveFlagsString = finalFlags.join(' ');
-
-
-  if (sourceHostObj.id !== 'localhost' && destinationHostObj.id !== 'localhost') {
-    if (sourceHostObj.id === destinationHostObj.id) {
-      // Remote-to-SAME-Remote: SSH into the host and perform a local rsync there.
-      const remoteLocalRsyncCommand = `rsync ${effectiveFlagsString} '${pathPair.source.replace(/'/g, "'\\''")}' '${pathPair.destination.replace(/'/g, "'\\''")}'`;
-      const sshPortOption = sourceHostObj.port ? `-p ${sourceHostObj.port}` : '';
-      rsyncCommand = `ssh -i "${privateKeyPath}" ${sshPortOption} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes ${sourceHostObj.user}@${sourceHostObj.hostname} "${remoteLocalRsyncCommand.replace(/"/g, '\\"')}"`;
-      console.log(`Executing remote-to-same-remote rsync (on ${sourceHostObj.alias}): ${rsyncCommand.split(' ')[0]} ... details in task log`);
-    } else {
-      // Remote-to-DIFFERENT-Remote: SSH into sourceHostObj (RHA) and execute rsync from there to destinationHostObj (RHB).
-      const rhaToRhbSshCommandForRsync = `ssh${destinationHostObj.port ? ` -p ${destinationHostObj.port}` : ''}`;
-      const remoteRsyncCommand = `rsync ${effectiveFlagsString} -e '${rhaToRhbSshCommandForRsync.replace(/'/g, "'\\''")}' '${pathPair.source.replace(/'/g, "'\\''")}' '${destinationHostObj.user}@${destinationHostObj.hostname}:${pathPair.destination.replace(/'/g, "'\\''")}'`;
-      const outerSshPortOption = sourceHostObj.port ? `-p ${sourceHostObj.port}` : '';
-      rsyncCommand = `ssh -i "${privateKeyPath}" ${outerSshPortOption} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes ${sourceHostObj.user}@${sourceHostObj.hostname} "${remoteRsyncCommand.replace(/"/g, '\\"')}"`;
-      console.log(`Executing remote-to-different-remote rsync (WSS -> ${sourceHostObj.alias} -> ${destinationHostObj.alias}): ${rsyncCommand.split(' ')[0]} ... details in task log`);
-    }
-  } else if (sourceHostObj.id !== 'localhost' || destinationHostObj.id !== 'localhost') {
-    // Local-to-Remote or Remote-to-Local
-    rsyncCommand = `rsync ${effectiveFlagsString} -e 'ssh ${rsyncSshCommand.substring(4)}' "${sourceArg}" "${destinationArg}"`;
-    console.log(`Executing rsync (local involved): ${rsyncCommand}`);
-  } else {
-    // Local-to-Local
-    rsyncCommand = `rsync ${effectiveFlagsString} "${sourceArg}" "${destinationArg}"`;
-    console.log(`Executing rsync (local-to-local): ${rsyncCommand}`);
-  }
-
+  
   return new Promise<RsyncExecutionResult>((resolve) => {
     exec(rsyncCommand, async (error, stdout, stderr) => { // Make callback async
         if (error) {
@@ -1270,6 +1264,28 @@ app.get('/api/automation-run-logs', (req, res) => {
   res.json(sortedLogs);
 });
 
+// New API endpoint to get the command string for a task
+app.get('/api/tasks/:taskId/command', async (req, res) => {
+  const { taskId } = req.params;
+  const task = tasks.find(t => t.id === taskId);
+
+  if (!task) {
+    return res.status(404).json({ message: 'Task not found.' });
+  }
+
+  try {
+    const commandDetails = [];
+    for (const pathPair of task.paths) {
+      // Call constructRsyncCommandForPathPair with forDisplayOnly = true
+      const commandStr = await constructRsyncCommandForPathPair(task, pathPair, hosts, true);
+      commandDetails.push({ pathPair, command: commandStr });
+    }
+    res.json({ taskName: task.name, commands: commandDetails });
+  } catch (error: any) {
+    console.error(`Error constructing command for display for task ${taskId}:`, error);
+    res.status(500).json({ message: `Failed to construct command for display: ${error.message}` });
+  }
+});
 
 // A simple API endpoint example
 app.get('/api/hello', (req, res) => {
