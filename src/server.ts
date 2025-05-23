@@ -78,19 +78,19 @@ function translateScheduleToCron(scheduleString?: string): string | null {
     if (!scheduleString) return null;
     switch (scheduleString) {
         case 'every_5_min':
-            return '*/5 * * * *'; // Every 5 minutes
+            return '*/5 * * * *'; // Every 5 Minutes
         case 'every_15_min':
-            return '*/15 * * * *'; // Every 15 minutes
+            return '*/15 * * * *'; // Every 15 Minutes
         case 'every_30_min':
-            return '*/30 * * * *'; // Every 30 minutes
+            return '*/30 * * * *'; // Every 30 Minutes
         case 'hourly':
             return '0 * * * *'; // Every hour at minute 0
         case 'every_2_hours':
-            return '0 */2 * * *'; // Every 2 hours at minute 0
+            return '0 */2 * * *'; // Every 2 Hours at minute 0
         case 'every_6_hours':
-            return '0 */6 * * *'; // Every 6 hours at minute 0
+            return '0 */6 * * *'; // Every 6 Hours at minute 0
         case 'every_12_hours':
-            return '0 */12 * * *'; // Every 12 hours at minute 0
+            return '0 */12 * * *'; // Every 12 Hours at minute 0
         case 'daily_3am':
             return '0 3 * * *'; // Every day at 3:00 AM
         case 'weekly_sun_3am':
@@ -1332,25 +1332,25 @@ async function runAutomationScanServerSide(configId: string) {
                 const genSchedule = config.generatedTaskSchedule || 'manual_once';
                 if (genSchedule === 'every_5_min') {
                     taskScheduleEnabled = true;
-                    taskScheduleDetailsCron = '*/5 * * * *'; // Every 5 minutes
+                    taskScheduleDetailsCron = '*/5 * * * *'; // Every 5 Minutes
                 } else if (genSchedule === 'every_15_min') {
                     taskScheduleEnabled = true;
-                    taskScheduleDetailsCron = '*/15 * * * *'; // Every 15 minutes
+                    taskScheduleDetailsCron = '*/15 * * * *'; // Every 15 Minutes
                 } else if (genSchedule === 'every_30_min') {
                     taskScheduleEnabled = true;
-                    taskScheduleDetailsCron = '*/30 * * * *'; // Every 30 minutes
+                    taskScheduleDetailsCron = '*/30 * * * *'; // Every 30 Minutes
                 } else if (genSchedule === 'hourly') {
                     taskScheduleEnabled = true;
                     taskScheduleDetailsCron = '0 * * * *'; // Every hour
                 } else if (genSchedule === 'every_2_hours') {
                     taskScheduleEnabled = true;
-                    taskScheduleDetailsCron = '0 */2 * * *'; // Every 2 hours
+                    taskScheduleDetailsCron = '0 */2 * * *'; // Every 2 Hours
                 } else if (genSchedule === 'every_6_hours') {
                     taskScheduleEnabled = true;
-                    taskScheduleDetailsCron = '0 */6 * * *'; // Every 6 hours
+                    taskScheduleDetailsCron = '0 */6 * * *'; // Every 6 Hours
                 } else if (genSchedule === 'every_12_hours') {
                     taskScheduleEnabled = true;
-                    taskScheduleDetailsCron = '0 */12 * * *'; // Every 12 hours
+                    taskScheduleDetailsCron = '0 */12 * * *'; // Every 12 Hours
                 } else if (genSchedule === 'daily_4am') {
                     taskScheduleEnabled = true;
                     taskScheduleDetailsCron = '0 4 * * *'; // Every day at 4 AM
