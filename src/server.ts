@@ -717,6 +717,13 @@ app.post('/api/tasks', async (req, res) => {
   res.status(201).json(newTask);
 });
 
+// DELETE all tasks
+app.delete('/api/tasks/delete-all', async (req, res) => {
+  tasks = []; // Clear the tasks array
+  await saveData(); // Persist the change
+  res.status(200).json({ message: 'All tasks deleted successfully.' }); // Or 204 No Content
+});
+
 app.delete('/api/tasks/:taskId', async (req, res) => {
   const { taskId } = req.params;
   const taskIndex = tasks.findIndex(t => t.id === taskId);
