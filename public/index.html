@@ -159,11 +159,20 @@
         /* Message Banner Styles */
         .message-banner {
             padding: 10px 15px;
-            margin-bottom: 15px;
             border: 1px solid transparent;
-            border-radius: 4px;
+            border-radius: 4px; /* Keep some rounding for aesthetics */
             text-align: center;
             font-weight: bold;
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000; /* Ensure it's above most other content */
+            border-top-left-radius: 4px; /* Adjust rounding for bottom placement */
+            border-top-right-radius: 4px;
+            border-bottom-left-radius: 0;
+            border-bottom-right-radius: 0;
+            margin-bottom: 0; /* Not needed with fixed positioning */
         }
         .message-banner.success {
             color: #155724;
@@ -265,7 +274,6 @@
     <div class="pride-banner"></div>
     <header>
         <img src="/projectzeus.gif" alt="Project Zeus Logo" class="header-gif">
-        <div id="messageBanner" class="message-banner" style="display:none;"></div>
         <h1>Project Zeus</h1>
         <nav>
             <a href="#" data-tab="tasks" class="active-nav-link">Tasks</a>
@@ -481,7 +489,8 @@
     </div>
 
     <footer>
-        <p style="text-align:center; margin-top: 20px;">&copy; 2025 Project Zeus</p>
+        <div id="messageBanner" class="message-banner" style="display:none;"></div>
+        <p style="text-align:center; margin-top: 20px; padding-bottom: 50px;">&copy; 2025 Project Zeus</p> <!-- Added padding-bottom to prevent overlap with fixed banner -->
     </footer>
 
     <script>
