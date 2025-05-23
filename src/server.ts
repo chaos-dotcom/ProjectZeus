@@ -1462,7 +1462,7 @@ async function runAutomationScanServerSide(configId: string) {
 
                 let baseFlags: string[];
                 if (config.type === 'livework') {
-                    baseFlags = ['-a', '-v', '--delete', '-u'];
+                    baseFlags = ['-a', '-v', '--delete', '-u', "--exclude='*.livework'"];
                 } else { // For turbosort
                     baseFlags = ['-a', '-v', '-u'];
                     if (!baseFlags.includes('--itemize-changes')) { // Should already be handled by POST /api/tasks
