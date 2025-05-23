@@ -1006,6 +1006,7 @@ interface RsyncExecutionResult {
 }
 
 async function executeRsyncCommand(task: Task, pathPair: PathPair, hostsList: Host[]): Promise<RsyncExecutionResult> {
+  const privateKeyPath = path.join(os.homedir(), '.ssh', 'websync_id_rsa');
   let rsyncCommand: string;
   try {
     rsyncCommand = await constructRsyncCommandForPathPair(task, pathPair, hostsList, false); // forDisplayOnly = false
