@@ -29,24 +29,37 @@
             background-color: navy; /* Main header background color */
             color: #fff; 
             padding: 1em 0; 
-            text-align: center; 
-            position: relative; /* For positioning the GIF */
+            text-align: center; /* This will be overridden by flex but kept for context */
+            position: relative; /* Keep for any other potential relative children */
+            display: flex;
+            align-items: center; /* Vertically center flex items */
+            padding: 0.5em 1em; /* Adjust padding for better spacing */
         }
         header img.header-gif {
-            position: absolute;
-            top: 0; /* Adjust as needed */
-            left: 0; /* Adjust as needed */
-            height: 100%; /* Adjust as needed */
+            /* position: absolute; Removed */
+            /* top: 0; Removed */
+            /* left: 0; Removed */
+            height: 2.5em; /* Adjust as needed, e.g., 40px */
             width: auto;
+            margin-right: 1em; /* Space between GIF and content */
+            flex-shrink: 0; /* Prevent GIF from shrinking */
+        }
+        /* New wrapper for h1 and nav */
+        .header-content-wrapper {
+            flex-grow: 1; /* Takes up remaining space */
+            display: flex;
+            flex-direction: column; /* Stack h1 and nav vertically */
+            align-items: center; /* Center h1 and nav horizontally */
         }
         header h1 { 
             color: #fff;
             text-transform: uppercase; /* Make title all caps */
+            margin: 0 0 0.25em 0; /* Adjusted margins for flex layout */
             /* text-shadow: 1px 1px 2px black, 0 0 1em black, 0 0 0.2em black; */ /* Add text shadow for readability */
         } 
         nav a { 
             color: #fff; 
-            margin: 0 15px; 
+            margin: 0 10px; /* Slightly reduced margin for potentially tighter spaces */
             text-decoration: none; 
             cursor: pointer; 
             /* text-shadow: 1px 1px 2px black; */ /* Add text shadow for readability */
@@ -274,13 +287,15 @@
     <div class="pride-banner"></div>
     <header>
         <img src="/projectzeus.gif" alt="Project Zeus Logo" class="header-gif">
-        <h1>Project Zeus</h1>
-        <nav>
-            <a href="#" data-tab="tasks" class="active-nav-link">Tasks</a>
-            <a href="#" data-tab="hosts">Hosts</a>
-            <a href="#" data-tab="automation">Automation</a>
-            <a href="#" data-tab="job-history">Job History</a>
-        </nav>
+        <div class="header-content-wrapper">
+            <h1>Project Zeus</h1>
+            <nav>
+                <a href="#" data-tab="tasks" class="active-nav-link">Tasks</a>
+                <a href="#" data-tab="hosts">Hosts</a>
+                <a href="#" data-tab="automation">Automation</a>
+                <a href="#" data-tab="job-history">Job History</a>
+            </nav>
+        </div>
     </header>
 
     <!-- Hosts Section -->
