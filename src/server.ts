@@ -133,14 +133,24 @@ let automationRunLogs: AutomationRunLog[] = []; // Will be populated by loadData
 
 // --- Data Persistence ---
 const DATA_FILE_PATH = path.join(__dirname, '..', 'websync-data.json');
+const JOB_HISTORY_FILE_PATH = path.join(__dirname, '..', 'job_history.json'); // New
 
 async function saveData(): Promise<void> {
   try {
-    const dataToSave = { hosts, tasks, automationConfigs, jobRunLogs, automationRunLogs };
-    await fs.promises.writeFile(DATA_FILE_PATH, JSON.stringify(dataToSave, null, 2), 'utf-8');
-    // console.log('Data saved to file.'); // Optional: for debugging
+    // Save main configuration data (hosts, tasks, automationConfigs, jobRunLogs)
+    const mainDataToSave = { hosts, tasks, automationConfigs, jobRunLogs }; // automationRunLogs removed
+    await fs.promises.writeFile(DATA_FILE_PATH, JSON.stringify(mainDataToSave, null, 2), 'utf-8');
+    // console.log('Main data saved to file.'); // Optional: for debugging
   } catch (error) {
-    console.error('Error saving data to file:', error);
+    console.error('Error saving main data to file:', error);
+  }
+
+  try {
+    // Save automation run logs to a separate file
+    await fs.promises.writeFile(JOB_HISTORY_FILE_PATH, JSON.stringify(automationRunLogs, null, 2), 'utf-8');
+    // console.log('Automation run logs saved to job_history.json.'); // Optional: for debugging
+  } catch (error) {
+    console.error('Error saving automation run logs to file:', error);
   }
 }
 
@@ -149,7 +159,7 @@ async function loadData(): Promise<void> {
   let loadedTasks: Task[] = [];
   let loadedAutomationConfigs: AutomationConfig[] = [];
   let loadedJobRunLogs: JobRunLog[] = [];
-  let loadedAutomationRunLogs: AutomationRunLog[] = [];
+  // let loadedAutomationRunLogs: AutomationRunLog[] = []; // Removed: will be loaded separately
 
   try {
     if (fs.existsSync(DATA_FILE_PATH)) {
@@ -159,7 +169,7 @@ async function loadData(): Promise<void> {
       loadedTasks = parsedData.tasks || [];
       loadedAutomationConfigs = parsedData.automationConfigs || [];
       loadedJobRunLogs = parsedData.jobRunLogs || [];
-      loadedAutomationRunLogs = parsedData.automationRunLogs || [];
+      // loadedAutomationRunLogs = parsedData.automationRunLogs || []; // Removed from here
     }
   } catch (error) {
     console.error('Error reading or parsing data file. Initializing with empty/default data.', error);
@@ -178,17 +188,32 @@ async function loadData(): Promise<void> {
   tasks = loadedTasks;
   automationConfigs = loadedAutomationConfigs;
   jobRunLogs = loadedJobRunLogs;
-  automationRunLogs = loadedAutomationRunLogs;
+  // automationRunLogs = loadedAutomationRunLogs; // Removed: will be loaded separately
+
+  // New: Load automation run logs from their separate file
+  let loadedAutomationRunLogsFromFile: AutomationRunLog[] = [];
+  try {
+    if (fs.existsSync(JOB_HISTORY_FILE_PATH)) {
+      const jobHistoryFileContent = await fs.promises.readFile(JOB_HISTORY_FILE_PATH, 'utf-8');
+      // Ensure parsing an empty or invalid file results in an empty array
+      const parsedJobHistory = JSON.parse(jobHistoryFileContent);
+      loadedAutomationRunLogsFromFile = Array.isArray(parsedJobHistory) ? parsedJobHistory : [];
+    }
+  } catch (error) {
+    console.error('Error reading or parsing job_history.json. Initializing with empty logs.', error);
+    loadedAutomationRunLogsFromFile = []; // Ensure it's an empty array on error
+  }
+  automationRunLogs = loadedAutomationRunLogsFromFile;
+
 
   // If the file didn't exist initially or was unparsable and resulted in empty data structures, save initial state.
   if (!fs.existsSync(DATA_FILE_PATH) ||
       ((loadedHosts.length === 0 && !localhostFromFile) &&
        loadedTasks.length === 0 &&
        loadedAutomationConfigs.length === 0 &&
-       loadedJobRunLogs.length === 0 &&
-       loadedAutomationRunLogs.length === 0)
+       loadedJobRunLogs.length === 0) // automationRunLogs condition removed
      ) {
-    await saveData();
+    await saveData(); // This will now create/update both files if needed
   }
 }
 
