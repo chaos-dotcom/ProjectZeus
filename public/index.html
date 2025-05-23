@@ -33,7 +33,7 @@
             position: relative; /* Keep for any other potential relative children */
             display: flex;
             align-items: stretch; /* Stretch items to fill height */
-            padding: 0.5em 1em; /* Adjust padding for better spacing */
+            padding: 0 1em; /* Remove vertical padding, keep horizontal */
         }
         header img.header-gif {
             /* position: absolute; Removed */
@@ -54,7 +54,7 @@
         header h1 { 
             color: #fff;
             text-transform: uppercase; /* Make title all caps */
-            margin: 0 0 0.25em 0; /* Adjusted margins for flex layout */
+            margin: 0 0 0.1em 0; /* Further reduce bottom margin to compact text block */
             /* text-shadow: 1px 1px 2px black, 0 0 1em black, 0 0 0.2em black; */ /* Add text shadow for readability */
         } 
         nav a { 
