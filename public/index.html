@@ -33,25 +33,23 @@
             position: relative; /* Keep for any other potential relative children */
             display: flex;
             align-items: center; /* Vertically center flex items */
-            padding: 0 1em 0 0; /* Remove left padding, keep right padding */
+            justify-content: space-between; /* Distribute space for three items */
+            padding: 0 1em; /* 1em padding on left and right of header */
         }
-        header img.header-gif {
-            /* position: absolute; Removed */
-            /* top: 0; Removed */
-            /* left: 0; Removed */
-            height: 6em; /* Increased by 20% from 5em to make it wider */
-            width: auto;   /* Maintain aspect ratio */
-            margin-right: 1em; /* Space between GIF and content */
-            flex-shrink: 0; /* Prevent GIF from shrinking */
+        .header-image { /* Renamed from header img.header-gif */
+            height: 6em;
+            width: auto;
+            flex-shrink: 0; /* Prevent images from shrinking */
         }
         /* New wrapper for h1 and nav */
         .header-content-wrapper {
-            flex-grow: 1; /* Takes up remaining space */
+            flex-grow: 1; /* Allows the content to take available space in the middle */
             display: flex;
             flex-direction: column; /* Stack h1 and nav vertically */
-            align-items: center; /* Center h1 and nav horizontally */
+            align-items: center; /* Center h1 and nav horizontally within its block */
+            margin: 0 1em; /* Create space between content and side images */
         }
-        header h1 { 
+        header h1 {
             color: #fff;
             text-transform: uppercase; /* Make title all caps */
             margin: 0 0 0.1em 0; /* Further reduce bottom margin to compact text block */
@@ -286,7 +284,7 @@
 <body>
     <div class="pride-banner"></div>
     <header>
-        <img src="/projectzeus.gif" alt="Project Zeus Logo" class="header-gif">
+        <img src="/projectzeus.gif" alt="Project Zeus Logo" class="header-image">
         <div class="header-content-wrapper">
             <h1>Project Zeus</h1>
             <nav>
@@ -296,6 +294,7 @@
                 <a href="#" data-tab="job-history">Job History</a>
             </nav>
         </div>
+        <img src="/themeaning.jpg" alt="The Meaning" class="header-image">
     </header>
 
     <!-- Hosts Section -->
