@@ -34,8 +34,17 @@
             height: 100%; /* Adjust as needed */
             width: auto;
         }
-        header h1 { color: #fff; } /* Project Zeus title color */
-        nav a { color: #fff; margin: 0 15px; text-decoration: none; cursor: pointer; }
+        header h1 { 
+            color: #fff; 
+            text-shadow: 1px 1px 2px black, 0 0 1em black, 0 0 0.2em black; /* Add text shadow for readability */
+        } 
+        nav a { 
+            color: #fff; 
+            margin: 0 15px; 
+            text-decoration: none; 
+            cursor: pointer; 
+            text-shadow: 1px 1px 2px black; /* Add text shadow for readability */
+        }
         nav a.active-nav-link { font-weight: bold; border-bottom: 2px solid #fff; }
         .container { max-width: 960px; margin: 20px auto; padding: 20px; background-color: #fff; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
         .tab-content { display: none; } /* Hide tabs by default */
