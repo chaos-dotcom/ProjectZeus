@@ -286,6 +286,3 @@ The server exposes the following API endpoints:
         { "filePath": "/path/to/file.txt" }
         ```
     *   Response: `200 OK` - Plain text content of the file.
-
-## Future Enhancements / TODOs
-*   UI for browsing directory contents using the `list-directory-contents` API.
