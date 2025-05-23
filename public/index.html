@@ -2126,33 +2126,29 @@
             removeBtn.addEventListener('click', () => {
                 // Only remove if more than one path pair exists
                 if (pathPairsContainer.querySelectorAll('.path-pair').length > 1) {
-                    div.remove();
+                    pathPairDiv.remove(); // Corrected from div.remove()
                 } else {
                     showMessage("At least one path pair is required.", 'error');
                 }
             });
 
             // NEW: Add event listeners for browse buttons within path pair
-            div.querySelector('.browse-source-path').addEventListener('click', function() {
-                const sourcePathInput = this.previousElementSibling;
-                const hostId = sourceHostSelect.value; // Get from the task's source host dropdown
-                openDirectoryBrowser(sourcePathInput, hostId, sourcePathInput.value || '/');
+            browseSourceBtn.addEventListener('click', function() {
+                // const sourcePathInput = this.previousElementSibling.querySelector('.source-path'); // Old logic
+                const hostId = sourceHostSelect.value; 
+                openDirectoryBrowser(sourcePathInput, hostId, sourcePathInput.value || '/'); // sourcePathInput is now directly available
             });
-            div.querySelector('.browse-destination-path').addEventListener('click', function() {
-                const destPathInput = this.previousElementSibling;
-                const hostId = destinationHostSelect.value; // Get from the task's destination host dropdown
-                openDirectoryBrowser(destPathInput, hostId, destPathInput.value || '/');
+            browseDestBtn.addEventListener('click', function() {
+                // const destPathInput = this.previousElementSibling.querySelector('.destination-path'); // Old logic
+                const hostId = destinationHostSelect.value; 
+                openDirectoryBrowser(destPathInput, hostId, destPathInput.value || '/'); // destPathInput is now directly available
             });
-            return div;
+            return pathPairDiv; // Corrected from return div;
         }
 
         addPathPairButton.addEventListener('click', () => {
             pathPairsContainer.appendChild(createPathPairElement());
-            // Show remove button on all path pairs if more than one exists
-            const allPathPairs = pathPairsContainer.querySelectorAll('.path-pair');
-            allPathPairs.forEach(pp => {
-                 pp.querySelector('.remove-path').style.display = allPathPairs.length > 1 ? 'inline-block' : 'none';
-            });
+            updateRemovePathButtonVisibility(); // Replaces the forEach loop
         });
         
         // Initial path pair - ensure its remove button is hidden if it's the only one
