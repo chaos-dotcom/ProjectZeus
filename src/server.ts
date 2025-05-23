@@ -1322,15 +1322,21 @@ async function runAutomationScanServerSide(configId: string) {
                 let taskScheduleEnabled = false;
                 let taskScheduleDetailsCron: string | undefined = undefined;
                 const genSchedule = config.generatedTaskSchedule || 'manual_once';
-                if (genSchedule === 'hourly') {
+                if (genSchedule === 'every_5_min') {
                     taskScheduleEnabled = true;
-                    taskScheduleDetailsCron = '0 * * * *';
+                    taskScheduleDetailsCron = '*/5 * * * *'; // Every 5 minutes
+                } else if (genSchedule === 'every_15_min') {
+                    taskScheduleEnabled = true;
+                    taskScheduleDetailsCron = '*/15 * * * *'; // Every 15 minutes
+                } else if (genSchedule === 'hourly') {
+                    taskScheduleEnabled = true;
+                    taskScheduleDetailsCron = '0 * * * *'; // Every hour
                 } else if (genSchedule === 'daily_4am') {
                     taskScheduleEnabled = true;
-                    taskScheduleDetailsCron = '0 4 * * *';
+                    taskScheduleDetailsCron = '0 4 * * *'; // Every day at 4 AM
                 } else if (genSchedule === 'weekly_mon_4am') {
                     taskScheduleEnabled = true;
-                    taskScheduleDetailsCron = '0 4 * * 1';
+                    taskScheduleDetailsCron = '0 4 * * 1'; // Every Monday at 4 AM
                 }
 
                 let baseFlags: string[];
