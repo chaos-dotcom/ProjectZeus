@@ -1,6 +1,7 @@
 import express from 'express';
 import path from 'path';
 import { exec } from 'child_process';
+import cron from 'node-cron';
 import fs from 'fs';
 import os from 'os';
 
@@ -62,10 +63,31 @@ interface AutomationConfig {
   destinationHostIds: string[];   // Array of host IDs to copy the project folder to
   destinationBasePath: string;    // Base path on each destination host
   processedLogFile?: string;      // For .turbosort: filename on source host listing processed project folders
+  scanSchedule?: string; // e.g., "manual", "hourly", "daily_3am"
+  generatedTaskSchedule?: string; // e.g., "manual_once", "hourly", "daily_4am"
   // templateTaskId?: string; // For future use: ID of a Task to use as a template
 }
 
 let automationConfigs: AutomationConfig[] = []; // Will be populated by loadData
+
+// Define a global array to keep track of cron jobs for automation scans
+let automationScanCronJobs: cron.ScheduledTask[] = [];
+
+// Helper function to translate schedule strings to cron patterns
+function translateScheduleToCron(scheduleString?: string): string | null {
+    if (!scheduleString) return null;
+    switch (scheduleString) {
+        case 'hourly':
+            return '0 * * * *'; // Every hour at minute 0
+        case 'daily_3am':
+            return '0 3 * * *'; // Every day at 3:00 AM
+        case 'weekly_sun_3am':
+            return '0 3 * * 0'; // Every Sunday at 3:00 AM
+        case 'manual':
+        default:
+            return null;
+    }
+}
 
 // --- Job Run Logging ---
 interface JobRunLog {
@@ -378,7 +400,9 @@ app.post('/api/automation-configs', async (req, res) => {
     scanHostId, 
     scanDirectoryPath, 
     destinationHostIds, 
-    destinationBasePath 
+    destinationBasePath,
+    scanSchedule,         // New field
+    generatedTaskSchedule // New field
   } = req.body;
 
   if (!name || !type || !scanHostId || !scanDirectoryPath || !destinationHostIds || !destinationBasePath) {
@@ -407,6 +431,8 @@ app.post('/api/automation-configs', async (req, res) => {
     scanDirectoryPath,
     destinationHostIds,
     destinationBasePath,
+    scanSchedule: scanSchedule || 'manual', // Default to manual
+    generatedTaskSchedule: generatedTaskSchedule || 'manual_once' // Default to manual_once
   };
 
   if (type === 'turbosort') {
@@ -416,6 +442,7 @@ app.post('/api/automation-configs', async (req, res) => {
 
   automationConfigs.push(newConfig);
   await saveData();
+  scheduleAutomationScans(); // Reschedule after adding
   res.status(201).json(newConfig);
 });
 
@@ -427,7 +454,9 @@ app.put('/api/automation-configs/:id', async (req, res) => {
     scanHostId, 
     scanDirectoryPath, 
     destinationHostIds, 
-    destinationBasePath 
+    destinationBasePath,
+    scanSchedule,         // New field
+    generatedTaskSchedule // New field
   } = req.body;
 
   if (!name || !type || !scanHostId || !scanDirectoryPath || !destinationHostIds || !destinationBasePath) {
@@ -461,6 +490,8 @@ app.put('/api/automation-configs/:id', async (req, res) => {
     scanDirectoryPath,
     destinationHostIds,
     destinationBasePath,
+    scanSchedule: scanSchedule || automationConfigs[configIndex].scanSchedule || 'manual',
+    generatedTaskSchedule: generatedTaskSchedule || automationConfigs[configIndex].generatedTaskSchedule || 'manual_once',
     // Ensure processedLogFile is handled correctly on update
     processedLogFile: type === 'turbosort' 
                       ? (automationConfigs[configIndex].processedLogFile || `.projectzeus_processed_${id}.txt`) 
@@ -468,6 +499,7 @@ app.put('/api/automation-configs/:id', async (req, res) => {
   };
 
   await saveData();
+  scheduleAutomationScans(); // Reschedule after updating
   res.json(automationConfigs[configIndex]);
 });
 
@@ -481,6 +513,7 @@ app.delete('/api/automation-configs/:id', async (req, res) => {
 
   automationConfigs.splice(configIndex, 1);
   await saveData();
+  scheduleAutomationScans(); // Reschedule after deleting
   res.status(204).send();
 });
 
@@ -1184,11 +1217,193 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
 });
 
+// In src/server.ts, add this new async function:
+async function runAutomationScanServerSide(configId: string) {
+    const config = automationConfigs.find(ac => ac.id === configId);
+    if (!config) {
+        console.error(`[CronScan] Automation config ${configId} not found.`);
+        return;
+    }
+    if (!config.scanHostId) {
+        console.error(`[CronScan] Scan host ID is missing for automation config ${config.name} (${configId}).`);
+        return;
+    }
+
+    const scanHost = hosts.find(h => h.id === config.scanHostId);
+    if (!scanHost) {
+        console.error(`[CronScan] Scan host ${config.scanHostId} not found for automation ${config.name}.`);
+        return;
+    }
+
+    console.log(`[CronScan] Running server-side scan for automation: ${config.name} (ID: ${configId})`);
+
+    try {
+        // 1. Scan for trigger files
+        const allFoundFiles = await scanDirectoryOnHost(scanHost, config.scanDirectoryPath);
+        const triggerFiles = allFoundFiles.filter(file => file.endsWith(`.${config.type}`));
+
+        console.log(`[CronScan] Found ${triggerFiles.length} trigger files for ${config.name}.`);
+
+        // 2. Fetch all tasks to compare against
+        // (tasks array is already available globally in server.ts)
+
+        // 3. Task Cleanup: Identify and delete tasks whose trigger files are gone
+        const tasksForThisAutomation = tasks.filter(task => task.automationConfigId === config.id);
+        let tasksDeletedCount = 0;
+        for (const task of tasksForThisAutomation) {
+            if (task.triggerFilePath && !triggerFiles.includes(task.triggerFilePath)) {
+                const taskIndex = tasks.findIndex(t => t.id === task.id);
+                if (taskIndex > -1) {
+                    tasks.splice(taskIndex, 1);
+                    tasksDeletedCount++;
+                    console.log(`[CronScan] Deleted task "${task.name}" (trigger file ${task.triggerFilePath} no longer found).`);
+                }
+            }
+        }
+        if (tasksDeletedCount > 0) {
+            console.log(`[CronScan] ${tasksDeletedCount} tasks deleted for ${config.name}.`);
+        }
+
+        // 4. Propose and Create New Jobs
+        let tasksCreatedCount = 0;
+        for (const triggerFile of triggerFiles) {
+            const parentDir = triggerFile.substring(0, triggerFile.lastIndexOf('/'));
+            const projectFolderName = parentDir.substring(parentDir.lastIndexOf('/') + 1);
+            let specificDestSubDir = "";
+
+            if (config.type === 'turbosort') {
+                try {
+                    specificDestSubDir = (await readFileContent(scanHost, triggerFile)).trim();
+                } catch (e: any) {
+                    console.error(`[CronScan] Error reading .turbosort file ${triggerFile} for ${config.name}: ${e.message}`);
+                    continue; // Skip this trigger file
+                }
+            }
+
+            for (const destHostId of config.destinationHostIds) {
+                const destHost = hosts.find(h => h.id === destHostId);
+                if (!destHost) {
+                    console.warn(`[CronScan] Destination host ${destHostId} not found for ${config.name}. Skipping.`);
+                    continue;
+                }
+
+                let finalDestinationPath = config.destinationBasePath;
+                if (config.type === 'turbosort' && specificDestSubDir) {
+                    finalDestinationPath = `${config.destinationBasePath}/${specificDestSubDir}/1_DRIVE`;
+                } else {
+                    finalDestinationPath = `${config.destinationBasePath}/${projectFolderName}`;
+                }
+                finalDestinationPath = finalDestinationPath.replace(/\/\//g, '/');
+                const rsyncSourcePath = parentDir.endsWith('/') ? parentDir : parentDir + '/';
+
+                const taskName = `Auto: ${config.name} - ${projectFolderName} to ${destHost.alias}`;
+
+                // Check if a similar task already exists
+                const existingTask = tasks.find(t =>
+                    t.automationConfigId === config.id &&
+                    t.triggerFilePath === triggerFile &&
+                    t.sourceHost === config.scanHostId &&
+                    t.destinationHost === destHostId &&
+                    t.paths.length === 1 &&
+                    t.paths[0].source === rsyncSourcePath &&
+                    t.paths[0].destination === finalDestinationPath
+                );
+
+                if (existingTask) {
+                    // console.log(`[CronScan] Task "${taskName}" already exists. Skipping creation.`);
+                    continue;
+                }
+
+                // Determine schedule for the auto-generated task
+                let taskScheduleEnabled = false;
+                let taskScheduleDetailsCron: string | undefined = undefined;
+                const genSchedule = config.generatedTaskSchedule || 'manual_once';
+                if (genSchedule === 'hourly') {
+                    taskScheduleEnabled = true;
+                    taskScheduleDetailsCron = '0 * * * *';
+                } else if (genSchedule === 'daily_4am') {
+                    taskScheduleEnabled = true;
+                    taskScheduleDetailsCron = '0 4 * * *';
+                } else if (genSchedule === 'weekly_mon_4am') {
+                    taskScheduleEnabled = true;
+                    taskScheduleDetailsCron = '0 4 * * 1';
+                }
+
+                let baseFlags: string[];
+                if (config.type === 'livework') {
+                    baseFlags = ['-a', '-v', '--delete', '-u'];
+                } else { // For turbosort
+                    baseFlags = ['-a', '-v', '-u'];
+                    if (!baseFlags.includes('--itemize-changes')) { // Should already be handled by POST /api/tasks
+                        baseFlags.push('--itemize-changes');
+                    }
+                    // Note: --exclude-from is handled dynamically in executeRsyncCommand
+                }
+
+                const newTask: Task = {
+                    id: Date.now().toString() + Math.random().toString(36).substring(2, 7), // More unique ID
+                    name: taskName,
+                    sourceHost: config.scanHostId,
+                    destinationHost: destHostId,
+                    paths: [{ source: rsyncSourcePath, destination: finalDestinationPath }],
+                    flags: baseFlags,
+                    scheduleEnabled: taskScheduleEnabled,
+                    scheduleDetails: taskScheduleDetailsCron,
+                    automationConfigId: config.id,
+                    triggerFilePath: triggerFile,
+                };
+                tasks.push(newTask);
+                tasksCreatedCount++;
+                console.log(`[CronScan] Created new task "${newTask.name}" for ${config.name}.`);
+            }
+        }
+        if (tasksCreatedCount > 0) {
+             console.log(`[CronScan] ${tasksCreatedCount} new tasks created for ${config.name}.`);
+        }
+
+        if (tasksDeletedCount > 0 || tasksCreatedCount > 0) {
+            await saveData();
+        }
+        console.log(`[CronScan] Finished server-side scan for automation: ${config.name}`);
+
+    } catch (error: any) {
+        console.error(`[CronScan] Error during server-side scan for ${config.name} (ID: ${configId}): ${error.message}`);
+    }
+}
+
+// In src/server.ts, add this new function:
+function scheduleAutomationScans() {
+    // Stop and clear existing cron jobs
+    automationScanCronJobs.forEach(job => job.stop());
+    automationScanCronJobs = [];
+
+    automationConfigs.forEach(config => {
+        if (config.scanSchedule && config.scanSchedule !== 'manual') {
+            const cronPattern = translateScheduleToCron(config.scanSchedule);
+            if (cronPattern && cron.validate(cronPattern)) {
+                try {
+                    const job = cron.schedule(cronPattern, () => {
+                        console.log(`[Cron] Triggering scan for automation: ${config.name} (ID: ${config.id}) as per schedule: ${config.scanSchedule}`);
+                        runAutomationScanServerSide(config.id);
+                    });
+                    automationScanCronJobs.push(job);
+                    console.log(`[Scheduler] Scheduled automation scan for "${config.name}" with pattern "${cronPattern}".`);
+                } catch (e) {
+                    console.error(`[Scheduler] Failed to schedule automation scan for "${config.name}" with pattern "${cronPattern}". Error: ${e}`);
+                }
+            } else if (cronPattern) {
+                 console.warn(`[Scheduler] Invalid cron pattern "${cronPattern}" generated for schedule "${config.scanSchedule}" for config "${config.name}". Scan will not be scheduled.`);
+            }
+        }
+    });
+}
+
 async function startServer() {
   await loadData();
   app.listen(port, () => {
     console.log(`Project Zeus server listening at http://localhost:${port}`);
   });
+  scheduleAutomationScans(); // Initialize schedules after loading data
 }
 
 startServer();
