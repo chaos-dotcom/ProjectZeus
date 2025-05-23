@@ -673,54 +673,117 @@
                 
                 const deleteButton = hostItem.querySelector('.btn-delete-host');
                 if (deleteButton) {
-                    deleteButton.addEventListener('click', async () => {
-                        if (confirm(`Are you sure you want to delete host "${host.alias}"?`)) {
+                    deleteButton.addEventListener('click', async function() { // Use function for 'this'
+                        const hostId = this.dataset.id; // host.id is on the button's dataset
+                        const hostAlias = host.alias; // host is from the forEach scope
+
+                        if (this.dataset.confirming === 'true') {
+                            // Second click: perform deletion
                             try {
-                                const res = await fetch(`/api/hosts/${host.id}`, { method: 'DELETE' });
-                                if (!res.ok) throw new Error(`Failed to delete host. Status: ${res.status}`);
+                                const res = await fetch(`/api/hosts/${hostId}`, { method: 'DELETE' });
+                                if (!res.ok) {
+                                    let errorMsg = `Failed to delete host. Status: ${res.status}`;
+                                    try { const errData = await res.json(); errorMsg = errData.message || errorMsg; } catch(e){}
+                                    throw new Error(errorMsg);
+                                }
                                 fetchAndRenderHosts(); // Refresh list
+                                showMessage(`Host "${hostAlias}" deleted.`, 'success');
                             } catch (err) {
                                 console.error('Error deleting host:', err);
-                                alert(`Error deleting host: ${err.message}`);
+                                showMessage(`Error deleting host: ${err.message}`, 'error');
                             }
+                            // Reset button
+                            this.dataset.confirming = 'false';
+                            this.textContent = 'Delete';
+                            this.classList.remove('btn-warning');
+                            // this.classList.add('btn-danger'); // Or ensure original class if it implies color
+                        } else {
+                            // First click: ask for confirmation
+                            this.dataset.confirming = 'true';
+                            this.textContent = 'Confirm Delete?';
+                            this.classList.add('btn-warning');
+                            showMessage(`Click "Confirm Delete?" again to permanently delete host "${hostAlias}".`, 'info', 0); // Sticky
                         }
                     });
                     // SSH setup button
                     const sshButton = hostItem.querySelector('.btn-ssh');
                     if (sshButton) {
-                        sshButton.addEventListener('click', async () => {
-                            const password = prompt(`Enter password for ${host.user}@${host.hostname}:`);
-                            if (password === null) { // User pressed cancel
-                                return;
-                            }
-                            if (!password) {
-                                alert('Password cannot be empty.');
-                                return;
-                            }
+                        sshButton.addEventListener('click', async function() { // Use function for 'this'
+                            if (this.dataset.passwordPrompting === 'true') return;
+                            this.dataset.passwordPrompting = 'true';
 
-                            try {
-                                sshButton.textContent = 'Setting up...';
-                                sshButton.disabled = true;
-                                const response = await fetch(`/api/hosts/${host.id}/ssh-copy-id`, {
-                                    method: 'POST',
-                                    headers: {
-                                        'Content-Type': 'application/json',
-                                    },
-                                    body: JSON.stringify({ password }),
-                                });
-                                
-                                const result = await response.json();
-                                if (!response.ok) {
-                                    throw new Error(result.message || `HTTP error! status: ${response.status}`);
+                            const originalButtonText = this.textContent;
+                            this.style.display = 'none'; // Hide original button
+
+                            const inputContainer = document.createElement('div');
+                            inputContainer.style.display = 'inline-block';
+
+                            const passwordInput = document.createElement('input');
+                            passwordInput.type = 'password';
+                            passwordInput.placeholder = 'Password';
+                            passwordInput.className = 'govuk-input govuk-input--width-10'; // GDS style
+                            passwordInput.style.marginRight = '5px';
+
+                            const submitPasswordButton = document.createElement('button');
+                            submitPasswordButton.textContent = 'Submit';
+                            submitPasswordButton.className = 'govuk-button govuk-button--secondary'; // GDS style
+                            submitPasswordButton.style.marginRight = '5px';
+
+                            const cancelPasswordButton = document.createElement('button');
+                            cancelPasswordButton.textContent = 'Cancel';
+                            cancelPasswordButton.className = 'govuk-button govuk-button--warning'; // GDS style
+
+                            inputContainer.appendChild(passwordInput);
+                            inputContainer.appendChild(submitPasswordButton);
+                            inputContainer.appendChild(cancelPasswordButton);
+                            this.parentNode.insertBefore(inputContainer, this.nextSibling);
+
+                            const cleanupPasswordPrompt = () => {
+                                inputContainer.remove();
+                                this.style.display = 'inline-block';
+                                this.textContent = originalButtonText;
+                                this.disabled = false;
+                                delete this.dataset.passwordPrompting;
+                            };
+
+                            submitPasswordButton.addEventListener('click', async () => {
+                                const password = passwordInput.value;
+                                if (!password) {
+                                    showMessage('Password cannot be empty.', 'error');
+                                    passwordInput.focus();
+                                    return;
                                 }
-                                showMessage(result.message, 'success');
-                            } catch (err) {
-                                console.error('SSH Setup Error:', err);
-                                showMessage(`Error during SSH setup: ${err.message}`, 'error');
-                            } finally {
-                                sshButton.textContent = 'SSH Setup';
-                                sshButton.disabled = false;
-                            }
+
+                                showMessage(`Attempting SSH setup for ${host.user}@${host.hostname}...`, 'info', 0);
+                                // Disable buttons during operation
+                                submitPasswordButton.disabled = true;
+                                cancelPasswordButton.disabled = true;
+                                passwordInput.disabled = true;
+
+                                try {
+                                    const response = await fetch(`/api/hosts/${host.id}/ssh-copy-id`, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ password }),
+                                    });
+                                    const result = await response.json();
+                                    if (!response.ok) {
+                                        throw new Error(result.message || `HTTP error! status: ${response.status}`);
+                                    }
+                                    showMessage(result.message, 'success');
+                                } catch (err) {
+                                    console.error('SSH Setup Error:', err);
+                                    showMessage(`Error during SSH setup: ${err.message}`, 'error', 0);
+                                } finally {
+                                    cleanupPasswordPrompt();
+                                }
+                            });
+
+                            cancelPasswordButton.addEventListener('click', () => {
+                                cleanupPasswordPrompt();
+                                showMessage('SSH setup cancelled.', 'info');
+                            });
+                            passwordInput.focus();
                         });
                     }
                 }
@@ -914,17 +977,38 @@
                     await executeAutomationScan(config);
                 });
 
-                itemDiv.querySelector('.delete-config-btn').addEventListener('click', async () => {
-                    if (confirm(`Are you sure you want to delete automation configuration "${config.name}"?`)) {
+                itemDiv.querySelector('.delete-config-btn').addEventListener('click', async function() { // Use function for 'this'
+                    const configId = this.dataset.configId; // config.id is on the button's dataset
+                    // Find the config name from the global 'automationConfigs' array or pass it if easier
+                    const currentConfig = automationConfigs.find(c => c.id === configId);
+                    const configName = currentConfig ? currentConfig.name : "this configuration";
+
+                    if (this.dataset.confirming === 'true') {
+                        // Second click: perform deletion
                         try {
-                            const res = await fetch(`/api/automation-configs/${config.id}`, { method: 'DELETE' });
-                            if (!res.ok) throw new Error(`Failed to delete config. Status: ${res.status}`);
+                            const res = await fetch(`/api/automation-configs/${configId}`, { method: 'DELETE' });
+                            if (!res.ok) {
+                                let errorMsg = `Failed to delete config. Status: ${res.status}`;
+                                try { const errData = await res.json(); errorMsg = errData.message || errorMsg; } catch(e){}
+                                throw new Error(errorMsg);
+                            }
                             fetchAndRenderAutomationConfigs(); // Refresh the list
-                            showMessage(`Automation configuration "${config.name}" deleted.`, 'success');
+                            showMessage(`Automation configuration "${configName}" deleted.`, 'success');
                         } catch (err) {
                             console.error('Error deleting automation config:', err);
                             showMessage(`Error deleting config: ${err.message}`, 'error');
                         }
+                        // Reset button
+                        this.dataset.confirming = 'false';
+                        this.textContent = 'Delete';
+                        this.classList.remove('btn-warning');
+                        // this.classList.add('btn-danger'); 
+                    } else {
+                        // First click: ask for confirmation
+                        this.dataset.confirming = 'true';
+                        this.textContent = 'Confirm Delete?';
+                        this.classList.add('btn-warning');
+                        showMessage(`Click "Confirm Delete?" again to permanently delete automation "${configName}".`, 'info', 0); // Sticky
                     }
                 });
                 automationConfigsListElement.appendChild(itemDiv);
@@ -1442,25 +1526,38 @@
                     loadTaskIntoForm(task);
                 });
                 
-                taskItem.querySelector('.delete-task').addEventListener('click', async () => {
-                    const taskId = task.id;
-                    if (confirm(`Are you sure you want to delete task "${task.name}"?`)) {
+                taskItem.querySelector('.delete-task').addEventListener('click', async function() { // Use function for 'this'
+                    const taskId = this.dataset.id; // task.id is on the button's dataset
+                    // To get task.name, we might need to find it or pass it if 'task' is not in scope here
+                    // Assuming 'task' from the forEach IS in scope for task.name
+                    const taskName = task.name; 
+
+                    if (this.dataset.confirming === 'true') {
+                        // Second click: perform deletion
                         try {
                             const response = await fetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
                             if (!response.ok) {
                                 let errorMsg = `Failed to delete task. Status: ${response.status}`;
-                                try {
-                                    const errorData = await response.json();
-                                    errorMsg = errorData.message || errorMsg;
-                                } catch (e) { /* Ignore if response is not JSON */ }
+                                try { const errorData = await response.json(); errorMsg = errorData.message || errorMsg; } catch (e) {}
                                 throw new Error(errorMsg);
                             }
-                            showMessage(`Task "${task.name}" deleted successfully.`, 'success');
+                            showMessage(`Task "${taskName}" deleted successfully.`, 'success');
                             fetchAndRenderTasks(); // Refresh the tasks list
                         } catch (error) {
                             console.error(`Error deleting task ${taskId}:`, error);
                             showMessage(`Error deleting task: ${error.message}`, 'error');
                         }
+                        // Reset button
+                        this.dataset.confirming = 'false';
+                        this.textContent = 'Delete';
+                        this.classList.remove('btn-warning');
+                        // this.classList.add('btn-danger');
+                    } else {
+                        // First click: ask for confirmation
+                        this.dataset.confirming = 'true';
+                        this.textContent = 'Confirm Delete?';
+                        this.classList.add('btn-warning');
+                        showMessage(`Click "Confirm Delete?" again to permanently delete task "${taskName}".`, 'info', 0); // Sticky
                     }
                 });
 
@@ -1719,11 +1816,48 @@
         const deleteAllTasksBtn = document.getElementById('deleteAllTasksBtn');
 
         if (runAllTasksBtn) {
-            runAllTasksBtn.addEventListener('click', async () => {
-                if (!confirm('Are you sure you want to run ALL tasks?')) return;
+            runAllTasksBtn.addEventListener('click', async function() { // Use function for 'this'
+                if (this.dataset.confirming === 'true') {
+                    // Second click: perform action
+                    this.textContent = 'Running All...';
+                    this.disabled = true;
+                    try {
+                        const response = await fetch('/api/tasks/run-all', { method: 'POST' });
+                        const result = await response.json();
+                        console.log("Run all tasks result:", result);
+                        const anyFailed = result.summary && result.summary.some(taskResult => taskResult.results.some(r => !r.success));
+                        if (anyFailed) {
+                            showMessage(result.message + " Some tasks had errors. Check console for details.", 'error', 0); // Sticky
+                        } else {
+                            showMessage(result.message, 'success');
+                        }
+                    } catch (error) {
+                        console.error('Error running all tasks:', error);
+                        showMessage(`Error running all tasks: ${error.message}`, 'error');
+                    } finally {
+                        // Reset button
+                        this.dataset.confirming = 'false';
+                        this.textContent = 'Run All Tasks';
+                        this.disabled = false;
+                        this.classList.remove('btn-warning');
+                        // this.classList.add('btn-info'); // Original class
+                    }
+                } else {
+                    // First click: ask for confirmation
+                    this.dataset.confirming = 'true';
+                    this.textContent = 'Confirm Run All?';
+                    this.classList.add('btn-warning');
+                    showMessage('Click "Confirm Run All?" again to execute all tasks.', 'info', 0); // Sticky
+                }
+            });
+        }
 
-                runAllTasksBtn.textContent = 'Running All...';
-                runAllTasksBtn.disabled = true;
+        if (deleteAllTasksBtn) {
+            deleteAllTasksBtn.addEventListener('click', async () => {
+                if (!confirm('Are you sure you want to delete ALL tasks? This action cannot be undone.')) return;
+
+                deleteAllTasksBtn.textContent = 'Deleting All...';
+                deleteAllTasksBtn.disabled = true;
                 try {
                     const response = await fetch('/api/tasks/run-all', { method: 'POST' });
                     const result = await response.json();
@@ -1747,30 +1881,37 @@
         }
 
         if (deleteAllTasksBtn) {
-            deleteAllTasksBtn.addEventListener('click', async () => {
-                if (!confirm('Are you sure you want to delete ALL tasks? This action cannot be undone.')) return;
-
-                deleteAllTasksBtn.textContent = 'Deleting All...';
-                deleteAllTasksBtn.disabled = true;
-                try {
-                    const response = await fetch('/api/tasks/delete-all', { method: 'DELETE' });
-                    if (!response.ok) {
-                        let errorMsg = 'Failed to delete all tasks.';
-                        try {
-                            const errorData = await response.json();
-                            errorMsg = errorData.message || errorMsg;
-                        } catch (e) { /* Ignore if response is not JSON */ }
-                        throw new Error(errorMsg);
+            deleteAllTasksBtn.addEventListener('click', async function() { // Use function for 'this'
+                if (this.dataset.confirming === 'true') {
+                    // Second click: perform action
+                    this.textContent = 'Deleting All...';
+                    this.disabled = true;
+                    try {
+                        const response = await fetch('/api/tasks/delete-all', { method: 'DELETE' });
+                        if (!response.ok) {
+                            let errorMsg = 'Failed to delete all tasks.';
+                            try { const errorData = await response.json(); errorMsg = errorData.message || errorMsg; } catch (e) {}
+                            throw new Error(errorMsg);
+                        }
+                        showMessage('All tasks deleted successfully.', 'success');
+                        fetchAndRenderTasks(); // Refresh the tasks list
+                    } catch (error) {
+                        console.error('Error deleting all tasks:', error);
+                        showMessage(`Error deleting all tasks: ${error.message}`, 'error');
+                    } finally {
+                        // Reset button
+                        this.dataset.confirming = 'false';
+                        this.textContent = 'Delete All Tasks';
+                        this.disabled = false;
+                        this.classList.remove('btn-warning');
+                        // this.classList.add('btn-danger'); // Original class
                     }
-                    // const result = await response.json(); // DELETE usually returns 204 No Content or a success message
-                    showMessage('All tasks deleted successfully.', 'success');
-                    fetchAndRenderTasks(); // Refresh the tasks list
-                } catch (error) {
-                    console.error('Error deleting all tasks:', error);
-                    showMessage(`Error deleting all tasks: ${error.message}`, 'error');
-                } finally {
-                    deleteAllTasksBtn.textContent = 'Delete All Tasks';
-                    deleteAllTasksBtn.disabled = false;
+                } else {
+                    // First click: ask for confirmation
+                    this.dataset.confirming = 'true';
+                    this.textContent = 'Confirm Delete All?';
+                    this.classList.add('btn-warning');
+                    showMessage('Click "Confirm Delete All?" again to PERMANENTLY delete all tasks. This cannot be undone.', 'info', 0); // Sticky
                 }
             });
         }
