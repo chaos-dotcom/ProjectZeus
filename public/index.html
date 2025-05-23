@@ -1537,7 +1537,18 @@
 
             // Set flags
             flagsButtonContainer.querySelectorAll('.flag-btn').forEach(button => {
-                if (task.flags.includes(button.dataset.flag)) {
+                const flagValueFromButton = button.dataset.flag;
+                let isActive = task.flags.includes(flagValueFromButton);
+
+                // Special handling for 'itemize-changes' flag
+                // The button uses '-i', but task data might have '--itemize-changes'
+                if (flagValueFromButton === '-i') { // This is the 'itemize-changes' button
+                    if (task.flags.includes('--itemize-changes')) {
+                        isActive = true;
+                    }
+                }
+
+                if (isActive) {
                     button.classList.add('active');
                 } else {
                     button.classList.remove('active');
