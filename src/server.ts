@@ -114,13 +114,29 @@ interface JobRunLog {
 
 let jobRunLogs: JobRunLog[] = []; // Will be populated by loadData
 
+// --- Automation Run Logging ---
+interface AutomationRunLog {
+  id: string;
+  automationConfigId: string;
+  automationConfigName: string;
+  startTime: string;
+  endTime: string;
+  status: 'success' | 'error' | 'completed_with_errors';
+  triggerFilesFound: number;
+  tasksCreatedCount: number;
+  tasksDeletedCount: number;
+  messages: string[];
+}
+
+let automationRunLogs: AutomationRunLog[] = []; // Will be populated by loadData
+
 
 // --- Data Persistence ---
 const DATA_FILE_PATH = path.join(__dirname, '..', 'websync-data.json');
 
 async function saveData(): Promise<void> {
   try {
-    const dataToSave = { hosts, tasks, automationConfigs, jobRunLogs };
+    const dataToSave = { hosts, tasks, automationConfigs, jobRunLogs, automationRunLogs };
     await fs.promises.writeFile(DATA_FILE_PATH, JSON.stringify(dataToSave, null, 2), 'utf-8');
     // console.log('Data saved to file.'); // Optional: for debugging
   } catch (error) {
@@ -133,6 +149,7 @@ async function loadData(): Promise<void> {
   let loadedTasks: Task[] = [];
   let loadedAutomationConfigs: AutomationConfig[] = [];
   let loadedJobRunLogs: JobRunLog[] = [];
+  let loadedAutomationRunLogs: AutomationRunLog[] = [];
 
   try {
     if (fs.existsSync(DATA_FILE_PATH)) {
@@ -142,6 +159,7 @@ async function loadData(): Promise<void> {
       loadedTasks = parsedData.tasks || [];
       loadedAutomationConfigs = parsedData.automationConfigs || [];
       loadedJobRunLogs = parsedData.jobRunLogs || [];
+      loadedAutomationRunLogs = parsedData.automationRunLogs || [];
     }
   } catch (error) {
     console.error('Error reading or parsing data file. Initializing with empty/default data.', error);
@@ -160,15 +178,17 @@ async function loadData(): Promise<void> {
   tasks = loadedTasks;
   automationConfigs = loadedAutomationConfigs;
   jobRunLogs = loadedJobRunLogs;
+  automationRunLogs = loadedAutomationRunLogs;
 
   // If the file didn't exist initially or was unparsable and resulted in empty data structures, save initial state.
-  if (!fs.existsSync(DATA_FILE_PATH) || 
-      ((loadedHosts.length === 0 && !localhostFromFile) && 
-       loadedTasks.length === 0 && 
+  if (!fs.existsSync(DATA_FILE_PATH) ||
+      ((loadedHosts.length === 0 && !localhostFromFile) &&
+       loadedTasks.length === 0 &&
        loadedAutomationConfigs.length === 0 &&
-       loadedJobRunLogs.length === 0)
+       loadedJobRunLogs.length === 0 &&
+       loadedAutomationRunLogs.length === 0)
      ) {
-    await saveData(); 
+    await saveData();
   }
 }
 
@@ -1218,6 +1238,13 @@ app.get('/api/job-run-logs', (req, res) => {
   res.json(sortedLogs);
 });
 
+// --- Automation Run Log API Endpoint ---
+app.get('/api/automation-run-logs', (req, res) => {
+  // Return logs sorted by start time, newest first
+  const sortedLogs = [...automationRunLogs].sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime());
+  res.json(sortedLogs);
+});
+
 
 // A simple API endpoint example
 app.get('/api/hello', (req, res) => {
@@ -1231,30 +1258,70 @@ app.get('*', (req, res) => {
 
 // In src/server.ts, add this new async function:
 async function runAutomationScanServerSide(configId: string) {
+    const startTimeForLog = new Date().toISOString();
+    const logEntry: Partial<AutomationRunLog> = {
+        automationConfigId: '', // Will be set once config is fetched
+        automationConfigName: '', // Will be set once config is fetched
+        startTime: startTimeForLog,
+        messages: [],
+        tasksCreatedCount: 0,
+        tasksDeletedCount: 0,
+        triggerFilesFound: 0,
+        status: 'success', // Default, will be changed on error
+    };
+
     const config = automationConfigs.find(ac => ac.id === configId);
     if (!config) {
-        console.error(`[CronScan] Automation config ${configId} not found.`);
+        const errorMsg = `[CronScan] Automation config ${configId} not found.`;
+        console.error(errorMsg);
+        logEntry.messages!.push(errorMsg);
+        logEntry.status = 'error';
+        logEntry.endTime = new Date().toISOString();
+        logEntry.id = Date.now().toString() + Math.random().toString(36).substring(2, 7);
+        automationRunLogs.push(logEntry as AutomationRunLog);
+        await saveData();
         return;
     }
+
+    logEntry.automationConfigId = config.id;
+    logEntry.automationConfigName = config.name;
+    logEntry.messages!.push(`Starting scan for automation: ${config.name} (ID: ${configId})`);
+
     if (!config.scanHostId) {
-        console.error(`[CronScan] Scan host ID is missing for automation config ${config.name} (${configId}).`);
+        const errorMsg = `[CronScan] Scan host ID is missing for automation config ${config.name} (${configId}).`;
+        console.error(errorMsg);
+        logEntry.messages!.push(errorMsg);
+        logEntry.status = 'error';
+        logEntry.endTime = new Date().toISOString();
+        logEntry.id = Date.now().toString() + Math.random().toString(36).substring(2, 7);
+        automationRunLogs.push(logEntry as AutomationRunLog);
+        await saveData();
         return;
     }
 
     const scanHost = hosts.find(h => h.id === config.scanHostId);
     if (!scanHost) {
-        console.error(`[CronScan] Scan host ${config.scanHostId} not found for automation ${config.name}.`);
+        const errorMsg = `[CronScan] Scan host ${config.scanHostId} not found for automation ${config.name}.`;
+        console.error(errorMsg);
+        logEntry.messages!.push(errorMsg);
+        logEntry.status = 'error';
+        logEntry.endTime = new Date().toISOString();
+        logEntry.id = Date.now().toString() + Math.random().toString(36).substring(2, 7);
+        automationRunLogs.push(logEntry as AutomationRunLog);
+        await saveData();
         return;
     }
 
-    console.log(`[CronScan] Running server-side scan for automation: ${config.name} (ID: ${configId})`);
+    // console.log(`[CronScan] Running server-side scan for automation: ${config.name} (ID: ${configId})`); // Covered by logEntry message
 
     try {
         // 1. Scan for trigger files
         const allFoundFiles = await scanDirectoryOnHost(scanHost, config.scanDirectoryPath);
         const triggerFiles = allFoundFiles.filter(file => file.endsWith(`.${config.type}`));
 
-        console.log(`[CronScan] Found ${triggerFiles.length} trigger files for ${config.name}.`);
+        logEntry.triggerFilesFound = triggerFiles.length;
+        logEntry.messages!.push(`Found ${triggerFiles.length} trigger files.`);
+        // console.log(`[CronScan] Found ${triggerFiles.length} trigger files for ${config.name}.`); // Covered by logEntry message
 
         // 2. Fetch all tasks to compare against
         // (tasks array is already available globally in server.ts)
@@ -1267,17 +1334,20 @@ async function runAutomationScanServerSide(configId: string) {
                 const taskIndex = tasks.findIndex(t => t.id === task.id);
                 if (taskIndex > -1) {
                     tasks.splice(taskIndex, 1);
-                    tasksDeletedCount++;
-                    console.log(`[CronScan] Deleted task "${task.name}" (trigger file ${task.triggerFilePath} no longer found).`);
+                    // tasksDeletedCount++; // This local var is removed, using logEntry.tasksDeletedCount
+                    logEntry.tasksDeletedCount!++;
+                    const deleteMsg = `Deleted task "${task.name}" (trigger file ${task.triggerFilePath} no longer found).`;
+                    logEntry.messages!.push(deleteMsg);
+                    // console.log(`[CronScan] Deleted task "${task.name}" (trigger file ${task.triggerFilePath} no longer found).`); // Covered by logEntry
                 }
             }
         }
-        if (tasksDeletedCount > 0) {
-            console.log(`[CronScan] ${tasksDeletedCount} tasks deleted for ${config.name}.`);
-        }
+        // if (tasksDeletedCount > 0) { // Covered by logEntry summary
+        //     console.log(`[CronScan] ${tasksDeletedCount} tasks deleted for ${config.name}.`);
+        // }
 
         // 4. Propose and Create New Jobs
-        let tasksCreatedCount = 0;
+        // let tasksCreatedCount = 0; // This local var is removed, using logEntry.tasksCreatedCount
         for (const triggerFile of triggerFiles) {
             const parentDir = triggerFile.substring(0, triggerFile.lastIndexOf('/'));
             const projectFolderName = parentDir.substring(parentDir.lastIndexOf('/') + 1);
@@ -1287,7 +1357,10 @@ async function runAutomationScanServerSide(configId: string) {
                 try {
                     specificDestSubDir = (await readFileContent(scanHost, triggerFile)).trim();
                 } catch (e: any) {
-                    console.error(`[CronScan] Error reading .turbosort file ${triggerFile} for ${config.name}: ${e.message}`);
+                    const errorMsg = `Error reading .turbosort file ${triggerFile}: ${e.message}`;
+                    console.error(`[CronScan] ${errorMsg} for ${config.name}`);
+                    logEntry.messages!.push(errorMsg);
+                    logEntry.status = 'completed_with_errors';
                     continue; // Skip this trigger file
                 }
             }
@@ -1295,7 +1368,10 @@ async function runAutomationScanServerSide(configId: string) {
             for (const destHostId of config.destinationHostIds) {
                 const destHost = hosts.find(h => h.id === destHostId);
                 if (!destHost) {
-                    console.warn(`[CronScan] Destination host ${destHostId} not found for ${config.name}. Skipping.`);
+                    const warnMsg = `Warning: Destination host ${destHostId} not found. Skipping related task creation.`;
+                    console.warn(`[CronScan] ${warnMsg} for ${config.name}.`);
+                    logEntry.messages!.push(warnMsg);
+                    if (logEntry.status !== 'error') logEntry.status = 'completed_with_errors';
                     continue;
                 }
 
@@ -1383,21 +1459,42 @@ async function runAutomationScanServerSide(configId: string) {
                     triggerFilePath: triggerFile,
                 };
                 tasks.push(newTask);
-                tasksCreatedCount++;
-                console.log(`[CronScan] Created new task "${newTask.name}" for ${config.name}.`);
+                // tasksCreatedCount++; // This local var is removed, using logEntry.tasksCreatedCount
+                logEntry.tasksCreatedCount!++;
+                const createMsg = `Created new task "${newTask.name}".`;
+                logEntry.messages!.push(createMsg);
+                // console.log(`[CronScan] Created new task "${newTask.name}" for ${config.name}.`); // Covered by logEntry
             }
         }
-        if (tasksCreatedCount > 0) {
-             console.log(`[CronScan] ${tasksCreatedCount} new tasks created for ${config.name}.`);
-        }
+        // if (tasksCreatedCount > 0) { // Covered by logEntry summary
+        //      console.log(`[CronScan] ${tasksCreatedCount} new tasks created for ${config.name}.`);
+        // }
 
-        if (tasksDeletedCount > 0 || tasksCreatedCount > 0) {
-            await saveData();
-        }
-        console.log(`[CronScan] Finished server-side scan for automation: ${config.name}`);
+        logEntry.messages!.push(`Scan finished for automation: ${config.name}.`);
+        // console.log(`[CronScan] Finished server-side scan for automation: ${config.name}`); // Covered by logEntry
 
     } catch (error: any) {
-        console.error(`[CronScan] Error during server-side scan for ${config.name} (ID: ${configId}): ${error.message}`);
+        const errorMsg = `Critical error during scan: ${error.message}`;
+        console.error(`[CronScan] ${errorMsg} for ${config.name} (ID: ${configId})`);
+        logEntry.messages!.push(errorMsg);
+        logEntry.status = 'error';
+    } finally {
+        logEntry.endTime = new Date().toISOString();
+        logEntry.id = Date.now().toString() + Math.random().toString(36).substring(2, 7); // Ensure ID is unique
+        automationRunLogs.push(logEntry as AutomationRunLog);
+
+        // Save data if tasks were modified OR if the scan itself had issues/results worth logging permanently
+        if (logEntry.tasksDeletedCount! > 0 || logEntry.tasksCreatedCount! > 0 || logEntry.status === 'error' || logEntry.status === 'completed_with_errors') {
+            await saveData();
+        } else if (logEntry.triggerFilesFound! > 0 && logEntry.tasksCreatedCount === 0 && logEntry.tasksDeletedCount === 0) { // All existed
+            await saveData();
+        } else if (logEntry.triggerFilesFound === 0 && logEntry.tasksDeletedCount === 0) { // No triggers, no deletions (a "no-op" scan but still logged)
+            await saveData();
+        }
+        // The old specific saveData call:
+        // if (tasksDeletedCount > 0 || tasksCreatedCount > 0) {
+        //     await saveData();
+        // }
     }
 }
 

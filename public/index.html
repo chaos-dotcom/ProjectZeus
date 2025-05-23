@@ -415,8 +415,17 @@
     <div class="container tab-content" id="job-history-section">
         <h2>Job Run History</h2>
         <button id="refreshJobHistoryButton" class="btn btn-info" style="margin-bottom: 10px;">Refresh History</button>
+        
+        <h3>Rsync Task Execution Logs</h3>
         <div id="jobHistoryList">
-            <p>Job run history will appear here.</p>
+            <p>Rsync task run history will appear here.</p>
+        </div>
+
+        <hr style="margin: 30px 0; border-top: 1px solid #ccc;"> <!-- Separator, styled for visibility -->
+
+        <h3>Automation Scan Logs</h3>
+        <div id="automationJobHistoryList"> <!-- New div -->
+            <p>Automation scan history will appear here.</p>
         </div>
     </div>
 
@@ -569,6 +578,7 @@
         // Job History Elements
         const jobHistoryListElement = document.getElementById('jobHistoryList');
         const refreshJobHistoryButton = document.getElementById('refreshJobHistoryButton');
+        const automationJobHistoryListElement = document.getElementById('automationJobHistoryList'); // New
 
 
         // Tab Navigation Elements
@@ -1942,21 +1952,37 @@
 
         // --- Job History Tab Functionality ---
         async function fetchAndRenderJobHistory() {
-            if (!jobHistoryListElement) return;
-            jobHistoryListElement.innerHTML = '<p>Loading job history...</p>';
-            try {
-                const response = await fetch('/api/job-run-logs');
-                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-                const logs = await response.json();
-                renderJobHistoryList(logs);
-            } catch (error) {
-                console.error('Error fetching job history:', error);
-                jobHistoryListElement.innerHTML = '<p style="color:red;">Error loading job history.</p>';
-                showMessage(`Error fetching job history: ${error.message}`, 'error');
+            if (jobHistoryListElement) { // For Rsync logs
+                jobHistoryListElement.innerHTML = '<p>Loading rsync task history...</p>';
+                try {
+                    const response = await fetch('/api/job-run-logs');
+                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status} for rsync logs`);
+                    const logs = await response.json();
+                    renderJobHistoryList(logs); // Existing function for rsync logs
+                } catch (error) {
+                    console.error('Error fetching rsync job history:', error);
+                    jobHistoryListElement.innerHTML = '<p style="color:red;">Error loading rsync task history.</p>';
+                    showMessage(`Error fetching rsync job history: ${error.message}`, 'error');
+                }
+            }
+
+            if (automationJobHistoryListElement) { // For Automation Scan logs
+                automationJobHistoryListElement.innerHTML = '<p>Loading automation scan history...</p>';
+                try {
+                    const response = await fetch('/api/automation-run-logs');
+                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status} for automation logs`);
+                    const automationLogs = await response.json();
+                    renderAutomationRunHistoryList(automationLogs); // New function
+                } catch (error) {
+                    console.error('Error fetching automation scan history:', error);
+                    automationJobHistoryListElement.innerHTML = '<p style="color:red;">Error loading automation scan history.</p>';
+                    showMessage(`Error fetching automation scan history: ${error.message}`, 'error');
+                }
             }
         }
 
         function renderJobHistoryList(logs) {
+            if (!jobHistoryListElement) return;
             jobHistoryListElement.innerHTML = '';
             if (logs.length === 0) {
                 jobHistoryListElement.innerHTML = '<p>No job run history found.</p>';
@@ -2007,6 +2033,61 @@
 
         if (refreshJobHistoryButton) {
             refreshJobHistoryButton.addEventListener('click', fetchAndRenderJobHistory);
+        }
+
+        function renderAutomationRunHistoryList(logs) {
+            if (!automationJobHistoryListElement) return;
+            automationJobHistoryListElement.innerHTML = '';
+            if (logs.length === 0) {
+                automationJobHistoryListElement.innerHTML = '<p>No automation scan history found.</p>';
+                return;
+            }
+
+            logs.forEach(log => {
+                const itemDiv = document.createElement('div');
+                itemDiv.className = `job-history-item`; // Reuse styling
+
+                const summaryDiv = document.createElement('div');
+                let statusClass = 'status-success'; // Default for 'success'
+                if (log.status === 'error') {
+                    statusClass = 'status-error';
+                } else if (log.status === 'completed_with_errors') {
+                    statusClass = 'status-warning';
+                }
+                summaryDiv.className = `job-history-summary ${statusClass}`;
+
+                summaryDiv.innerHTML = `
+                    <span class="task-name" style="font-weight:normal;">Scan: <strong>${log.automationConfigName}</strong></span>
+                    <span class="timestamp">${new Date(log.startTime).toLocaleString()} - ${new Date(log.endTime).toLocaleTimeString()}</span>
+                    <span class="status-indicator">${log.status.replace(/_/g, ' ')}</span>
+                `;
+
+                const detailsDiv = document.createElement('div');
+                detailsDiv.className = 'job-history-details';
+                // Sanitize messages before putting them in <pre>
+                const sanitizedMessages = log.messages.map(msg => 
+                    msg.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+                ).join('\n');
+
+                detailsDiv.innerHTML = `
+                    <h5>Scan Summary</h5>
+                    <p><strong>Status:</strong> ${log.status.replace(/_/g, ' ')}</p>
+                    <p><strong>Trigger Files Found:</strong> ${log.triggerFilesFound}</p>
+                    <p><strong>Tasks Created:</strong> ${log.tasksCreatedCount}</p>
+                    <p><strong>Tasks Deleted:</strong> ${log.tasksDeletedCount}</p>
+                    <h5>Scan Log Messages:</h5>
+                    <pre style="max-height: 200px; overflow-y: auto; background-color: #efefef; border: 1px solid #ddd; padding: 5px;">${sanitizedMessages}</pre>
+                `;
+
+                itemDiv.appendChild(summaryDiv);
+                itemDiv.appendChild(detailsDiv);
+
+                summaryDiv.addEventListener('click', () => {
+                    const isHidden = detailsDiv.style.display === 'none' || detailsDiv.style.display === '';
+                    detailsDiv.style.display = isHidden ? 'block' : 'none';
+                });
+                automationJobHistoryListElement.appendChild(itemDiv);
+            });
         }
 
 
