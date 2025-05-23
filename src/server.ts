@@ -87,6 +87,10 @@ function translateScheduleToCron(scheduleString?: string): string | null {
             return '0 * * * *'; // Every hour at minute 0
         case 'every_2_hours':
             return '0 */2 * * *'; // Every 2 hours at minute 0
+        case 'every_6_hours':
+            return '0 */6 * * *'; // Every 6 hours at minute 0
+        case 'every_12_hours':
+            return '0 */12 * * *'; // Every 12 hours at minute 0
         case 'daily_3am':
             return '0 3 * * *'; // Every day at 3:00 AM
         case 'weekly_sun_3am':
@@ -1341,6 +1345,12 @@ async function runAutomationScanServerSide(configId: string) {
                 } else if (genSchedule === 'every_2_hours') {
                     taskScheduleEnabled = true;
                     taskScheduleDetailsCron = '0 */2 * * *'; // Every 2 hours
+                } else if (genSchedule === 'every_6_hours') {
+                    taskScheduleEnabled = true;
+                    taskScheduleDetailsCron = '0 */6 * * *'; // Every 6 hours
+                } else if (genSchedule === 'every_12_hours') {
+                    taskScheduleEnabled = true;
+                    taskScheduleDetailsCron = '0 */12 * * *'; // Every 12 hours
                 } else if (genSchedule === 'daily_4am') {
                     taskScheduleEnabled = true;
                     taskScheduleDetailsCron = '0 4 * * *'; // Every day at 4 AM

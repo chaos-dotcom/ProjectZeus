@@ -344,6 +344,8 @@
                         <option value="every_30_min">Every 30 minutes</option>
                         <option value="hourly">Every Hour</option>
                         <option value="every_2_hours">Every 2 hours</option>
+                        <option value="every_6_hours">Every 6 hours</option>
+                        <option value="every_12_hours">Every 12 hours</option>
                         <option value="daily_3am">Every Day (approx 3 AM)</option>
                         <option value="weekly_sun_3am">Weekly (Sunday approx 3 AM)</option>
                     </select>
@@ -359,6 +361,8 @@
                         <option value="every_30_min">Every 30 minutes</option>
                         <option value="hourly">Every Hour</option>
                         <option value="every_2_hours">Every 2 hours</option>
+                        <option value="every_6_hours">Every 6 hours</option>
+                        <option value="every_12_hours">Every 12 hours</option>
                         <option value="daily_4am">Every Day (approx 4 AM)</option>
                         <option value="weekly_mon_4am">Weekly (Monday approx 4 AM)</option>
                     </select>
@@ -1059,6 +1063,12 @@
                             } else if (genSchedule === 'every_2_hours') {
                                 taskScheduleEnabled = true;
                                 taskScheduleDetails = '0 */2 * * *'; // Every 2 hours
+                            } else if (genSchedule === 'every_6_hours') {
+                                taskScheduleEnabled = true;
+                                taskScheduleDetails = '0 */6 * * *'; // Every 6 hours
+                            } else if (genSchedule === 'every_12_hours') {
+                                taskScheduleEnabled = true;
+                                taskScheduleDetails = '0 */12 * * *'; // Every 12 hours
                             } else if (genSchedule === 'daily_4am') {
                                 taskScheduleEnabled = true;
                                 taskScheduleDetails = '0 4 * * *'; // Every day at 4 AM
