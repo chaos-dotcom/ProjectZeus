@@ -32,15 +32,15 @@
             text-align: center; /* This will be overridden by flex but kept for context */
             position: relative; /* Keep for any other potential relative children */
             display: flex;
-            align-items: stretch; /* Stretch items to fill height */
+            align-items: center; /* Vertically center flex items */
             padding: 0 1em; /* Remove vertical padding, keep horizontal */
         }
         header img.header-gif {
             /* position: absolute; Removed */
             /* top: 0; Removed */
             /* left: 0; Removed */
-            height: auto; /* Allow image to stretch vertically */
-            width: auto;
+            height: 2.5em; /* Set a specific height to control size */
+            width: auto;   /* Maintain aspect ratio */
             margin-right: 1em; /* Space between GIF and content */
             flex-shrink: 0; /* Prevent GIF from shrinking */
         }
