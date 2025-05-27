@@ -1264,11 +1264,25 @@ app.get('/api/job-run-logs', (req, res) => {
   res.json(sortedLogs);
 });
 
+// DELETE all job run logs
+app.delete('/api/job-run-logs', async (req, res) => {
+  jobRunLogs = [];
+  await saveData();
+  res.status(200).json({ message: 'All job run logs cleared successfully.' });
+});
+
 // --- Automation Run Log API Endpoint ---
 app.get('/api/automation-run-logs', (req, res) => {
   // Return logs sorted by start time, newest first
   const sortedLogs = [...automationRunLogs].sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime());
   res.json(sortedLogs);
+});
+
+// DELETE all automation run logs
+app.delete('/api/automation-run-logs', async (req, res) => {
+  automationRunLogs = [];
+  await saveData(); // This will save the empty automationRunLogs to job_history.json
+  res.status(200).json({ message: 'All automation run logs cleared successfully.' });
 });
 
 // New API endpoint to get the command string for a task
