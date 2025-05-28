@@ -1407,7 +1407,7 @@ app.get('/api/hello', (req, res) => {
 });
 
 // All other GET requests not handled before will return the main index.html
-app.get('/*', (req, res) => {
+app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
 });
 
