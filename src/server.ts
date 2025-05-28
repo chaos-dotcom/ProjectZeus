@@ -360,12 +360,14 @@ app.post('/api/hosts/:hostId/scan-directory', async (req: Request<HostIdParams, 
   const { directoryPath } = req.body;
 
   if (!directoryPath) {
-    return res.status(400).json({ message: 'directoryPath is required in the request body.' });
+    res.status(400).json({ message: 'directoryPath is required in the request body.' });
+    return;
   }
 
   const host = hosts.find(h => h.id === hostId);
   if (!host) {
-    return res.status(404).json({ message: 'Host not found.' });
+    res.status(404).json({ message: 'Host not found.' });
+    return;
   }
 
   try {
@@ -442,12 +444,14 @@ app.post('/api/hosts/:hostId/list-directory-contents', async (req: Request<HostI
   const { directoryPath } = req.body;
 
   if (!directoryPath) {
-    return res.status(400).json({ message: 'directoryPath is required in the request body.' });
+    res.status(400).json({ message: 'directoryPath is required in the request body.' });
+    return;
   }
 
   const host = hosts.find(h => h.id === hostId);
   if (!host) {
-    return res.status(404).json({ message: 'Host not found.' });
+    res.status(404).json({ message: 'Host not found.' });
+    return;
   }
 
   try {
@@ -497,12 +501,14 @@ app.post('/api/hosts/:hostId/read-file', async (req: Request<HostIdParams, any, 
   const { filePath } = req.body;
 
   if (!filePath) {
-    return res.status(400).json({ message: 'filePath is required in the request body.' });
+    res.status(400).json({ message: 'filePath is required in the request body.' });
+    return;
   }
 
   const host = hosts.find(h => h.id === hostId);
   if (!host) {
-    return res.status(404).json({ message: 'Host not found.' });
+    res.status(404).json({ message: 'Host not found.' });
+    return;
   }
 
   try {
@@ -532,20 +538,25 @@ app.post('/api/automation-configs', async (req: Request<{}, any, AutomationConfi
   } = req.body;
 
   if (!name || !type || !scanHostId || !scanDirectoryPath || !destinationHostIds || !destinationBasePath) {
-    return res.status(400).json({ message: 'Name, type, scanHostId, scanDirectoryPath, destinationHostIds, and destinationBasePath are required.' });
+    res.status(400).json({ message: 'Name, type, scanHostId, scanDirectoryPath, destinationHostIds, and destinationBasePath are required.' });
+    return;
   }
   if (type !== 'livework' && type !== 'turbosort') {
-    return res.status(400).json({ message: 'Invalid type. Must be "livework" or "turbosort".' });
+    res.status(400).json({ message: 'Invalid type. Must be "livework" or "turbosort".' });
+    return;
   }
   if (!hosts.find(h => h.id === scanHostId)) {
-    return res.status(400).json({ message: 'scanHostId does not refer to a valid host.' });
+    res.status(400).json({ message: 'scanHostId does not refer to a valid host.' });
+    return;
   }
   if (!Array.isArray(destinationHostIds) || destinationHostIds.length === 0) {
-    return res.status(400).json({ message: 'destinationHostIds must be a non-empty array.'});
+    res.status(400).json({ message: 'destinationHostIds must be a non-empty array.'});
+    return;
   }
   for (const destHostId of destinationHostIds) {
     if (!hosts.find(h => h.id === destHostId)) {
-      return res.status(400).json({ message: `Invalid hostId "${destHostId}" in destinationHostIds.` });
+      res.status(400).json({ message: `Invalid hostId "${destHostId}" in destinationHostIds.` });
+      return;
     }
   }
 
@@ -586,26 +597,32 @@ app.put('/api/automation-configs/:id', async (req: Request<IdParams, any, Automa
   } = req.body;
 
   if (!name || !type || !scanHostId || !scanDirectoryPath || !destinationHostIds || !destinationBasePath) {
-    return res.status(400).json({ message: 'Name, type, scanHostId, scanDirectoryPath, destinationHostIds, and destinationBasePath are required.' });
+    res.status(400).json({ message: 'Name, type, scanHostId, scanDirectoryPath, destinationHostIds, and destinationBasePath are required.' });
+    return;
   }
   if (type !== 'livework' && type !== 'turbosort') {
-    return res.status(400).json({ message: 'Invalid type. Must be "livework" or "turbosort".' });
+    res.status(400).json({ message: 'Invalid type. Must be "livework" or "turbosort".' });
+    return;
   }
   if (!hosts.find(h => h.id === scanHostId)) {
-    return res.status(400).json({ message: 'scanHostId does not refer to a valid host.' });
+    res.status(400).json({ message: 'scanHostId does not refer to a valid host.' });
+    return;
   }
   if (!Array.isArray(destinationHostIds) || destinationHostIds.length === 0) {
-    return res.status(400).json({ message: 'destinationHostIds must be a non-empty array.'});
+    res.status(400).json({ message: 'destinationHostIds must be a non-empty array.'});
+    return;
   }
   for (const destHostId of destinationHostIds) {
     if (!hosts.find(h => h.id === destHostId)) {
-      return res.status(400).json({ message: `Invalid hostId "${destHostId}" in destinationHostIds.` });
+      res.status(400).json({ message: `Invalid hostId "${destHostId}" in destinationHostIds.` });
+      return;
     }
   }
 
   const configIndex = automationConfigs.findIndex(ac => ac.id === id);
   if (configIndex === -1) {
-    return res.status(404).json({ message: 'Automation configuration not found.' });
+    res.status(404).json({ message: 'Automation configuration not found.' });
+    return;
   }
 
   automationConfigs[configIndex] = {
@@ -634,7 +651,8 @@ app.delete('/api/automation-configs/:id', async (req: Request<IdParams, any, any
   const configIndex = automationConfigs.findIndex(ac => ac.id === id);
 
   if (configIndex === -1) {
-    return res.status(404).json({ message: 'Automation configuration not found.' });
+    res.status(404).json({ message: 'Automation configuration not found.' });
+    return;
   }
 
   automationConfigs.splice(configIndex, 1);
@@ -665,10 +683,12 @@ app.post('/api/hosts', async (req: Request<{}, any, HostRequestBody>, res: Respo
   const { alias, user, hostname, port } = req.body;
 
   if (!alias || !user || !hostname) {
-    return res.status(400).json({ message: 'Alias, User, and Hostname are required' });
+    res.status(400).json({ message: 'Alias, User, and Hostname are required' });
+    return;
   }
   if (port && (isNaN(parseInt(String(port), 10)) || parseInt(String(port), 10) <= 0 || parseInt(String(port), 10) > 65535)) {
-    return res.status(400).json({ message: 'Port must be a valid number between 1 and 65535' });
+    res.status(400).json({ message: 'Port must be a valid number between 1 and 65535' });
+    return;
   }
 
   const newHost: Host = {
@@ -691,26 +711,31 @@ app.put('/api/hosts/:id', async (req: Request<IdParams, any, UpdateHostRequestBo
   if (id === 'localhost' && (req.body.user || req.body.hostname || req.body.port)) {
     // Allow changing alias of localhost, but not other critical fields.
     if (Object.keys(req.body).some(key => !['alias'].includes(key))) {
-         return res.status(400).json({ message: 'Only the alias of Localhost can be modified.' });
+         res.status(400).json({ message: 'Only the alias of Localhost can be modified.' });
+         return;
     }
   }
 
   if (!alias) { // User and hostname might not be sent if only alias is changing for localhost
     if (id !== 'localhost' || !req.body.alias) { // if not localhost, or if localhost and no alias sent
-        return res.status(400).json({ message: 'Alias is required' });
+        res.status(400).json({ message: 'Alias is required' });
+        return;
     }
   }
   if (id !== 'localhost' && (!user || !hostname)) {
-      return res.status(400).json({ message: 'User and Hostname are required for non-localhost entries' });
+      res.status(400).json({ message: 'User and Hostname are required for non-localhost entries' });
+      return;
   }
 
   if (port && (isNaN(parseInt(String(port), 10)) || parseInt(String(port), 10) <= 0 || parseInt(String(port), 10) > 65535)) {
-    return res.status(400).json({ message: 'Port must be a valid number between 1 and 65535' });
+    res.status(400).json({ message: 'Port must be a valid number between 1 and 65535' });
+    return;
   }
 
   const hostIndex = hosts.findIndex(h => h.id === id);
   if (hostIndex === -1) {
-    return res.status(404).json({ message: 'Host not found' });
+    res.status(404).json({ message: 'Host not found' });
+    return;
   }
 
   // Update fields
@@ -732,11 +757,13 @@ app.delete('/api/hosts/:id', async (req: Request<IdParams, any, any>, res: Respo
   const { id } = req.params;
   // Prevent deleting the default 'localhost' entry if it's special
   if (id === 'localhost') {
-      return res.status(400).json({ message: 'Cannot delete the default Localhost entry.' });
+      res.status(400).json({ message: 'Cannot delete the default Localhost entry.' });
+      return;
   }
   const hostIndex = hosts.findIndex(h => h.id === id);
   if (hostIndex === -1) {
-    return res.status(404).json({ message: 'Host not found' });
+    res.status(404).json({ message: 'Host not found' });
+    return;
   }
   hosts.splice(hostIndex, 1);
   await saveData();
@@ -750,12 +777,14 @@ app.post('/api/hosts/:id/ssh-copy-id', async (req: Request<IdParams, any, SshCop
   const { password } = req.body;
 
   if (!password) {
-    return res.status(400).json({ message: 'Password is required.' });
+    res.status(400).json({ message: 'Password is required.' });
+    return;
   }
 
   const host = hosts.find(h => h.id === id);
   if (!host || host.id === 'localhost') {
-    return res.status(404).json({ message: 'Host not found or operation not applicable to Localhost.' });
+    res.status(404).json({ message: 'Host not found or operation not applicable to Localhost.' });
+    return;
   }
 
   const privateKeyPath = path.join(os.homedir(), '.ssh', 'websync_id_rsa');
@@ -833,18 +862,22 @@ app.post('/api/tasks', async (req: Request<{}, any, TaskRequestBody>, res: Respo
   } = req.body;
 
   if (!name) {
-    return res.status(400).json({ message: 'Task name is required' });
+    res.status(400).json({ message: 'Task name is required' });
+    return;
   }
   if (!sourceHost || !destinationHost) {
-    return res.status(400).json({ message: 'Source and Destination hosts are required' });
+    res.status(400).json({ message: 'Source and Destination hosts are required' });
+    return;
   }
   if (!paths || !Array.isArray(paths) || paths.length === 0) {
-    return res.status(400).json({ message: 'At least one source/destination path pair is required' });
+    res.status(400).json({ message: 'At least one source/destination path pair is required' });
+    return;
   }
   // Basic validation for paths
   for (const p of paths) {
     if (typeof p.source !== 'string' || typeof p.destination !== 'string') {
-      return res.status(400).json({ message: 'Each path pair must have a source and a destination string.' });
+      res.status(400).json({ message: 'Each path pair must have a source and a destination string.' });
+      return;
     }
   }
 
@@ -890,7 +923,8 @@ app.delete('/api/tasks/:taskId', async (req: Request<TaskIdParams, any, any>, re
   const taskIndex = tasks.findIndex(t => t.id === taskId);
 
   if (taskIndex === -1) {
-    return res.status(404).json({ message: 'Task not found.' });
+    res.status(404).json({ message: 'Task not found.' });
+    return;
   }
 
   tasks.splice(taskIndex, 1);
@@ -915,23 +949,28 @@ app.put('/api/tasks/:taskId', async (req: Request<TaskIdParams, any, StrictUpdat
   } = req.body;
 
   if (!name) {
-    return res.status(400).json({ message: 'Task name is required' });
+    res.status(400).json({ message: 'Task name is required' });
+    return;
   }
   if (!sourceHost || !destinationHost) {
-    return res.status(400).json({ message: 'Source and Destination hosts are required' });
+    res.status(400).json({ message: 'Source and Destination hosts are required' });
+    return;
   }
   if (!paths || !Array.isArray(paths) || paths.length === 0) {
-    return res.status(400).json({ message: 'At least one source/destination path pair is required' });
+    res.status(400).json({ message: 'At least one source/destination path pair is required' });
+    return;
   }
   for (const p of paths) {
     if (typeof p.source !== 'string' || typeof p.destination !== 'string') {
-      return res.status(400).json({ message: 'Each path pair must have a source and a destination string.' });
+      res.status(400).json({ message: 'Each path pair must have a source and a destination string.' });
+      return;
     }
   }
 
   const taskIndex = tasks.findIndex(t => t.id === taskId);
   if (taskIndex === -1) {
-    return res.status(404).json({ message: 'Task not found.' });
+    res.status(404).json({ message: 'Task not found.' });
+    return;
   }
 
   // Preserve automation-related fields if they exist and are not part of the update payload
@@ -1250,7 +1289,8 @@ app.post('/api/tasks/:taskId/run', async (req: Request<TaskIdParams, any, any>, 
       results: [{ pathPair: {source: 'N/A', destination: 'N/A'}, success: false, stdout: '', stderr: errorMsg, command: 'N/A' }]
     });
     await saveData();
-    return res.status(404).json({ message: errorMsg });
+    res.status(404).json({ message: errorMsg });
+    return;
   }
 
   const executionResults: RsyncExecutionResult[] = [];
@@ -1289,7 +1329,8 @@ app.post('/api/tasks/:taskId/run', async (req: Request<TaskIdParams, any, any>, 
 
 app.post('/api/tasks/run-all', async (req: Request<{}, any, any>, res: Response): Promise<void> => {
   if (tasks.length === 0) {
-    return res.json({ message: 'No tasks to run.' });
+    res.json({ message: 'No tasks to run.' });
+    return;
   }
 
   console.log('Starting to run all tasks...');
@@ -1358,7 +1399,8 @@ app.get('/api/tasks/:taskId/command', async (req: Request<TaskIdParams, any, any
   const task = tasks.find(t => t.id === taskId);
 
   if (!task) {
-    return res.status(404).json({ message: 'Task not found.' });
+    res.status(404).json({ message: 'Task not found.' });
+    return;
   }
 
   try {
@@ -1391,12 +1433,14 @@ app.post('/api/hosts/:hostId/suggest-path', async (req: Request<HostIdParams, an
   const { currentInputPath } = req.body;
 
   if (typeof currentInputPath !== 'string') {
-    return res.status(400).json({ message: 'currentInputPath (string) is required in the request body.' });
+    res.status(400).json({ message: 'currentInputPath (string) is required in the request body.' });
+    return;
   }
 
   const host = hosts.find(h => h.id === hostId);
   if (!host) {
-    return res.status(404).json({ message: 'Host not found.' });
+    res.status(404).json({ message: 'Host not found.' });
+    return;
   }
 
   try {
