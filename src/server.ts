@@ -15,7 +15,7 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // Serve projectzeus.gif from the project root
-app.get('/projectzeus.gif', (req, res) => {
+app.get('/projectzeus\\.gif', (req, res) => {
   const gifPath = path.join(__dirname, '..', 'projectzeus.gif'); // Resolves to PROJECT_ROOT/projectzeus.gif
   res.sendFile(gifPath, (err) => {
     if (err) {
