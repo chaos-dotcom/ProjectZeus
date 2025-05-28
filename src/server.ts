@@ -355,7 +355,7 @@ async function scanDirectoryOnHost(host: Host, directoryPath: string): Promise<s
   }
 }
 
-app.post('/api/hosts/:hostId/scan-directory', async (req: Request<HostIdParams, any, ScanDirectoryRequestBody>, res: Response) => {
+app.post('/api/hosts/:hostId/scan-directory', async (req: Request<HostIdParams, any, ScanDirectoryRequestBody>, res: Response): Promise<void> => {
   const { hostId } = req.params;
   const { directoryPath } = req.body;
 
@@ -437,7 +437,7 @@ async function listDirectoryContents(host: Host, directoryPath: string): Promise
   }
 }
 
-app.post('/api/hosts/:hostId/list-directory-contents', async (req: Request<HostIdParams, any, ListDirectoryContentsRequestBody>, res: Response) => {
+app.post('/api/hosts/:hostId/list-directory-contents', async (req: Request<HostIdParams, any, ListDirectoryContentsRequestBody>, res: Response): Promise<void> => {
   const { hostId } = req.params;
   const { directoryPath } = req.body;
 
@@ -492,7 +492,7 @@ async function readFileContent(host: Host, filePath: string): Promise<string> {
   }
 }
 
-app.post('/api/hosts/:hostId/read-file', async (req: Request<HostIdParams, any, ReadFileRequestBody>, res: Response) => {
+app.post('/api/hosts/:hostId/read-file', async (req: Request<HostIdParams, any, ReadFileRequestBody>, res: Response): Promise<void> => {
   const { hostId } = req.params;
   const { filePath } = req.body;
 
@@ -519,7 +519,7 @@ app.get('/api/automation-configs', (req, res) => {
   res.json(automationConfigs);
 });
 
-app.post('/api/automation-configs', async (req: Request<{}, any, AutomationConfigRequestBody>, res: Response) => {
+app.post('/api/automation-configs', async (req: Request<{}, any, AutomationConfigRequestBody>, res: Response): Promise<void> => {
   const { 
     name, 
     type, 
@@ -572,7 +572,7 @@ app.post('/api/automation-configs', async (req: Request<{}, any, AutomationConfi
   res.status(201).json(newConfig);
 });
 
-app.put('/api/automation-configs/:id', async (req: Request<IdParams, any, AutomationConfigRequestBody>, res: Response) => {
+app.put('/api/automation-configs/:id', async (req: Request<IdParams, any, AutomationConfigRequestBody>, res: Response): Promise<void> => {
   const { id } = req.params;
   const { 
     name, 
@@ -629,7 +629,7 @@ app.put('/api/automation-configs/:id', async (req: Request<IdParams, any, Automa
   res.json(automationConfigs[configIndex]);
 });
 
-app.delete('/api/automation-configs/:id', async (req: Request<IdParams, any, any>, res: Response) => {
+app.delete('/api/automation-configs/:id', async (req: Request<IdParams, any, any>, res: Response): Promise<void> => {
   const { id } = req.params;
   const configIndex = automationConfigs.findIndex(ac => ac.id === id);
 
@@ -661,13 +661,13 @@ app.get('/api/hosts', (req, res) => {
 });
 
 // POST a new host
-app.post('/api/hosts', async (req: Request<{}, any, HostRequestBody>, res: Response) => {
+app.post('/api/hosts', async (req: Request<{}, any, HostRequestBody>, res: Response): Promise<void> => {
   const { alias, user, hostname, port } = req.body;
 
   if (!alias || !user || !hostname) {
     return res.status(400).json({ message: 'Alias, User, and Hostname are required' });
   }
-  if (port && (isNaN(parseInt(port, 10)) || parseInt(port, 10) <= 0 || parseInt(port, 10) > 65535)) {
+  if (port && (isNaN(parseInt(String(port), 10)) || parseInt(String(port), 10) <= 0 || parseInt(String(port), 10) > 65535)) {
     return res.status(400).json({ message: 'Port must be a valid number between 1 and 65535' });
   }
 
@@ -676,7 +676,7 @@ app.post('/api/hosts', async (req: Request<{}, any, HostRequestBody>, res: Respo
     alias,
     user,
     hostname,
-    port: port ? parseInt(port, 10) : undefined,
+    port: port ? parseInt(String(port), 10) : undefined,
   };
   hosts.push(newHost);
   await saveData();
@@ -684,7 +684,7 @@ app.post('/api/hosts', async (req: Request<{}, any, HostRequestBody>, res: Respo
 });
 
 // PUT (update) an existing host
-app.put('/api/hosts/:id', async (req: Request<IdParams, any, UpdateHostRequestBody>, res: Response) => {
+app.put('/api/hosts/:id', async (req: Request<IdParams, any, UpdateHostRequestBody>, res: Response): Promise<void> => {
   const { id } = req.params;
   const { alias, user, hostname, port } = req.body;
 
@@ -704,7 +704,7 @@ app.put('/api/hosts/:id', async (req: Request<IdParams, any, UpdateHostRequestBo
       return res.status(400).json({ message: 'User and Hostname are required for non-localhost entries' });
   }
 
-  if (port && (isNaN(parseInt(port, 10)) || parseInt(port, 10) <= 0 || parseInt(port, 10) > 65535)) {
+  if (port && (isNaN(parseInt(String(port), 10)) || parseInt(String(port), 10) <= 0 || parseInt(String(port), 10) > 65535)) {
     return res.status(400).json({ message: 'Port must be a valid number between 1 and 65535' });
   }
 
@@ -716,9 +716,9 @@ app.put('/api/hosts/:id', async (req: Request<IdParams, any, UpdateHostRequestBo
   // Update fields
   hosts[hostIndex].alias = alias || hosts[hostIndex].alias; // Keep old alias if new one not provided (e.g. for localhost)
   if (id !== 'localhost') {
-    hosts[hostIndex].user = user;
-    hosts[hostIndex].hostname = hostname;
-    hosts[hostIndex].port = port ? parseInt(port, 10) : undefined;
+    hosts[hostIndex].user = user!;
+    hosts[hostIndex].hostname = hostname!;
+    hosts[hostIndex].port = port ? parseInt(String(port), 10) : undefined;
   } else { // For localhost, only update alias if provided
       if (alias) hosts[hostIndex].alias = alias;
   }
@@ -728,7 +728,7 @@ app.put('/api/hosts/:id', async (req: Request<IdParams, any, UpdateHostRequestBo
 });
 
 // DELETE a host
-app.delete('/api/hosts/:id', async (req: Request<IdParams, any, any>, res: Response) => {
+app.delete('/api/hosts/:id', async (req: Request<IdParams, any, any>, res: Response): Promise<void> => {
   const { id } = req.params;
   // Prevent deleting the default 'localhost' entry if it's special
   if (id === 'localhost') {
@@ -745,7 +745,7 @@ app.delete('/api/hosts/:id', async (req: Request<IdParams, any, any>, res: Respo
 
 
 // SSH Key Copy ID
-app.post('/api/hosts/:id/ssh-copy-id', async (req: Request<IdParams, any, SshCopyIdRequestBody>, res: Response) => {
+app.post('/api/hosts/:id/ssh-copy-id', async (req: Request<IdParams, any, SshCopyIdRequestBody>, res: Response): Promise<void> => {
   const { id } = req.params;
   const { password } = req.body;
 
@@ -818,7 +818,7 @@ app.get('/api/tasks', (req, res) => {
 });
 
 // POST a new task
-app.post('/api/tasks', async (req: Request<{}, any, TaskRequestBody>, res: Response) => {
+app.post('/api/tasks', async (req: Request<{}, any, TaskRequestBody>, res: Response): Promise<void> => {
   const {
     name,
     sourceHost,
@@ -878,14 +878,14 @@ app.post('/api/tasks', async (req: Request<{}, any, TaskRequestBody>, res: Respo
 });
 
 // DELETE all tasks
-app.delete('/api/tasks/delete-all', async (req: Request<{}, any, any>, res: Response) => {
+app.delete('/api/tasks/delete-all', async (req: Request<{}, any, any>, res: Response): Promise<void> => {
   tasks = []; // Clear the tasks array
   await saveData(); // Persist the change
   scheduleTaskExecutions(); // Reschedule tasks
   res.status(200).json({ message: 'All tasks deleted successfully.' }); // Or 204 No Content
 });
 
-app.delete('/api/tasks/:taskId', async (req: Request<TaskIdParams, any, any>, res: Response) => {
+app.delete('/api/tasks/:taskId', async (req: Request<TaskIdParams, any, any>, res: Response): Promise<void> => {
   const { taskId } = req.params;
   const taskIndex = tasks.findIndex(t => t.id === taskId);
 
@@ -899,7 +899,7 @@ app.delete('/api/tasks/:taskId', async (req: Request<TaskIdParams, any, any>, re
   res.status(204).send(); // No content, successful deletion
 });
 
-app.put('/api/tasks/:taskId', async (req: Request<TaskIdParams, any, StrictUpdateTaskRequestBody>, res: Response) => {
+app.put('/api/tasks/:taskId', async (req: Request<TaskIdParams, any, StrictUpdateTaskRequestBody>, res: Response): Promise<void> => {
   const { taskId } = req.params;
   const {
     name,
@@ -1233,7 +1233,7 @@ async function executeRsyncCommand(task: Task, pathPair: PathPair, hostsList: Ho
   });
 }
 
-app.post('/api/tasks/:taskId/run', async (req: Request<TaskIdParams, any, any>, res: Response) => {
+app.post('/api/tasks/:taskId/run', async (req: Request<TaskIdParams, any, any>, res: Response): Promise<void> => {
   const { taskId } = req.params;
   const task = tasks.find(t => t.id === taskId);
   const startTime = new Date().toISOString();
@@ -1287,7 +1287,7 @@ app.post('/api/tasks/:taskId/run', async (req: Request<TaskIdParams, any, any>, 
   }
 });
 
-app.post('/api/tasks/run-all', async (req: Request<{}, any, any>, res: Response) => {
+app.post('/api/tasks/run-all', async (req: Request<{}, any, any>, res: Response): Promise<void> => {
   if (tasks.length === 0) {
     return res.json({ message: 'No tasks to run.' });
   }
@@ -1353,7 +1353,7 @@ app.delete('/api/automation-run-logs', async (req, res) => {
 });
 
 // New API endpoint to get the command string for a task
-app.get('/api/tasks/:taskId/command', async (req: Request<TaskIdParams, any, any>, res: Response) => {
+app.get('/api/tasks/:taskId/command', async (req: Request<TaskIdParams, any, any>, res: Response): Promise<void> => {
   const { taskId } = req.params;
   const task = tasks.find(t => t.id === taskId);
 
@@ -1386,7 +1386,7 @@ app.get('*', (req, res) => {
 });
 
 // --- Path Autocompletion API Endpoint ---
-app.post('/api/hosts/:hostId/suggest-path', async (req: Request<HostIdParams, any, SuggestPathRequestBody>, res: Response) => {
+app.post('/api/hosts/:hostId/suggest-path', async (req: Request<HostIdParams, any, SuggestPathRequestBody>, res: Response): Promise<void> => {
   const { hostId } = req.params;
   const { currentInputPath } = req.body;
 
