@@ -1469,7 +1469,6 @@ function scheduleTaskExecutions() {
                         console.log(`[CronTask] Triggering task execution: ${task.name} (ID: ${task.id}) as per schedule: ${task.scheduleDetails}`);
                         runScheduledTask(task.id);
                     }, {
-                        scheduled: true, // Ensure the job is scheduled when created
                         // timezone: "Your/Timezone" // Optional: specify timezone if tasks are timezone-sensitive
                     });
                     taskExecutionCronJobs.push(job);
