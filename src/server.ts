@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Request, Response } from 'express';
 import path from 'path';
 import { exec } from 'child_process';
 import cron, { ScheduledTask } from 'node-cron';
@@ -293,7 +293,7 @@ async function scanDirectoryOnHost(host: Host, directoryPath: string): Promise<s
   }
 }
 
-app.post('/api/hosts/:hostId/scan-directory', async (req, res) => {
+app.post('/api/hosts/:hostId/scan-directory', async (req: Request, res: Response) => {
   const { hostId } = req.params;
   const { directoryPath } = req.body;
 
@@ -375,7 +375,7 @@ async function listDirectoryContents(host: Host, directoryPath: string): Promise
   }
 }
 
-app.post('/api/hosts/:hostId/list-directory-contents', async (req, res) => {
+app.post('/api/hosts/:hostId/list-directory-contents', async (req: Request, res: Response) => {
   const { hostId } = req.params;
   const { directoryPath } = req.body;
 
@@ -430,7 +430,7 @@ async function readFileContent(host: Host, filePath: string): Promise<string> {
   }
 }
 
-app.post('/api/hosts/:hostId/read-file', async (req, res) => {
+app.post('/api/hosts/:hostId/read-file', async (req: Request, res: Response) => {
   const { hostId } = req.params;
   const { filePath } = req.body;
 
@@ -457,7 +457,7 @@ app.get('/api/automation-configs', (req, res) => {
   res.json(automationConfigs);
 });
 
-app.post('/api/automation-configs', async (req, res) => {
+app.post('/api/automation-configs', async (req: Request, res: Response) => {
   const { 
     name, 
     type, 
@@ -510,7 +510,7 @@ app.post('/api/automation-configs', async (req, res) => {
   res.status(201).json(newConfig);
 });
 
-app.put('/api/automation-configs/:id', async (req, res) => {
+app.put('/api/automation-configs/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   const { 
     name, 
@@ -567,7 +567,7 @@ app.put('/api/automation-configs/:id', async (req, res) => {
   res.json(automationConfigs[configIndex]);
 });
 
-app.delete('/api/automation-configs/:id', async (req, res) => {
+app.delete('/api/automation-configs/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   const configIndex = automationConfigs.findIndex(ac => ac.id === id);
 
@@ -599,7 +599,7 @@ app.get('/api/hosts', (req, res) => {
 });
 
 // POST a new host
-app.post('/api/hosts', async (req, res) => {
+app.post('/api/hosts', async (req: Request, res: Response) => {
   const { alias, user, hostname, port } = req.body;
 
   if (!alias || !user || !hostname) {
@@ -622,7 +622,7 @@ app.post('/api/hosts', async (req, res) => {
 });
 
 // PUT (update) an existing host
-app.put('/api/hosts/:id', async (req, res) => {
+app.put('/api/hosts/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   const { alias, user, hostname, port } = req.body;
 
@@ -666,7 +666,7 @@ app.put('/api/hosts/:id', async (req, res) => {
 });
 
 // DELETE a host
-app.delete('/api/hosts/:id', async (req, res) => {
+app.delete('/api/hosts/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   // Prevent deleting the default 'localhost' entry if it's special
   if (id === 'localhost') {
@@ -683,7 +683,7 @@ app.delete('/api/hosts/:id', async (req, res) => {
 
 
 // SSH Key Copy ID
-app.post('/api/hosts/:id/ssh-copy-id', async (req, res) => {
+app.post('/api/hosts/:id/ssh-copy-id', async (req: Request, res: Response) => {
   const { id } = req.params;
   const { password } = req.body;
 
@@ -756,7 +756,7 @@ app.get('/api/tasks', (req, res) => {
 });
 
 // POST a new task
-app.post('/api/tasks', async (req, res) => {
+app.post('/api/tasks', async (req: Request, res: Response) => {
   const {
     name,
     sourceHost,
@@ -816,14 +816,14 @@ app.post('/api/tasks', async (req, res) => {
 });
 
 // DELETE all tasks
-app.delete('/api/tasks/delete-all', async (req, res) => {
+app.delete('/api/tasks/delete-all', async (req: Request, res: Response) => {
   tasks = []; // Clear the tasks array
   await saveData(); // Persist the change
   scheduleTaskExecutions(); // Reschedule tasks
   res.status(200).json({ message: 'All tasks deleted successfully.' }); // Or 204 No Content
 });
 
-app.delete('/api/tasks/:taskId', async (req, res) => {
+app.delete('/api/tasks/:taskId', async (req: Request, res: Response) => {
   const { taskId } = req.params;
   const taskIndex = tasks.findIndex(t => t.id === taskId);
 
@@ -837,7 +837,7 @@ app.delete('/api/tasks/:taskId', async (req, res) => {
   res.status(204).send(); // No content, successful deletion
 });
 
-app.put('/api/tasks/:taskId', async (req, res) => {
+app.put('/api/tasks/:taskId', async (req: Request, res: Response) => {
   const { taskId } = req.params;
   const {
     name,
@@ -1171,7 +1171,7 @@ async function executeRsyncCommand(task: Task, pathPair: PathPair, hostsList: Ho
   });
 }
 
-app.post('/api/tasks/:taskId/run', async (req, res) => {
+app.post('/api/tasks/:taskId/run', async (req: Request, res: Response) => {
   const { taskId } = req.params;
   const task = tasks.find(t => t.id === taskId);
   const startTime = new Date().toISOString();
@@ -1225,7 +1225,7 @@ app.post('/api/tasks/:taskId/run', async (req, res) => {
   }
 });
 
-app.post('/api/tasks/run-all', async (req, res) => {
+app.post('/api/tasks/run-all', async (req: Request, res: Response) => {
   if (tasks.length === 0) {
     return res.json({ message: 'No tasks to run.' });
   }
@@ -1291,7 +1291,7 @@ app.delete('/api/automation-run-logs', async (req, res) => {
 });
 
 // New API endpoint to get the command string for a task
-app.get('/api/tasks/:taskId/command', async (req, res) => {
+app.get('/api/tasks/:taskId/command', async (req: Request, res: Response) => {
   const { taskId } = req.params;
   const task = tasks.find(t => t.id === taskId);
 
@@ -1324,7 +1324,7 @@ app.get('*', (req, res) => {
 });
 
 // --- Path Autocompletion API Endpoint ---
-app.post('/api/hosts/:hostId/suggest-path', async (req, res) => {
+app.post('/api/hosts/:hostId/suggest-path', async (req: Request, res: Response) => {
   const { hostId } = req.params;
   const { currentInputPath } = req.body;
 
