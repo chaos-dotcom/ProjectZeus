@@ -53,6 +53,68 @@ interface Task {
 
 let tasks: Task[] = []; // Will be populated by loadData
 
+// --- Type definitions for Express route handlers ---
+
+// Parameter types
+interface HostIdParams { hostId: string; }
+interface IdParams { id: string; }
+interface TaskIdParams { taskId: string; }
+
+// Request Body types
+interface ScanDirectoryRequestBody { directoryPath: string; }
+interface ListDirectoryContentsRequestBody { directoryPath: string; }
+interface ReadFileRequestBody { filePath: string; }
+
+interface AutomationConfigRequestBody {
+  name: string;
+  type: 'livework' | 'turbosort';
+  scanHostId: string;
+  scanDirectoryPath: string;
+  destinationHostIds: string[];
+  destinationBasePath: string;
+  scanSchedule?: string;
+  generatedTaskSchedule?: string;
+}
+
+interface HostRequestBody {
+  alias: string;
+  user: string;
+  hostname: string;
+  port?: string | number; // Accepts string from form, parsed to number
+}
+interface UpdateHostRequestBody { // For PUT /api/hosts/:id
+  alias?: string;
+  user?: string;
+  hostname?: string;
+  port?: string | number;
+}
+
+interface SshCopyIdRequestBody { password?: string; } // Logic checks for presence
+
+interface TaskRequestBody {
+  name: string;
+  sourceHost: string;
+  destinationHost: string;
+  paths: PathPair[];
+  flags?: string[];
+  scheduleEnabled?: boolean;
+  scheduleDetails?: string;
+  automationConfigId?: string;
+  triggerFilePath?: string;
+}
+interface StrictUpdateTaskRequestBody { // For PUT /api/tasks/:taskId
+  name: string;
+  sourceHost: string;
+  destinationHost: string;
+  paths: PathPair[];
+  flags?: string[];
+  scheduleEnabled?: boolean;
+  scheduleDetails?: string;
+  // automationConfigId and triggerFilePath are not typically part of user update payload
+}
+
+interface SuggestPathRequestBody { currentInputPath: string; }
+
 // --- Automation Configuration ---
 interface AutomationConfig {
   id: string;
@@ -293,7 +355,7 @@ async function scanDirectoryOnHost(host: Host, directoryPath: string): Promise<s
   }
 }
 
-app.post('/api/hosts/:hostId/scan-directory', async (req: Request, res: Response) => {
+app.post('/api/hosts/:hostId/scan-directory', async (req: Request<HostIdParams, any, ScanDirectoryRequestBody>, res: Response) => {
   const { hostId } = req.params;
   const { directoryPath } = req.body;
 
@@ -375,7 +437,7 @@ async function listDirectoryContents(host: Host, directoryPath: string): Promise
   }
 }
 
-app.post('/api/hosts/:hostId/list-directory-contents', async (req: Request, res: Response) => {
+app.post('/api/hosts/:hostId/list-directory-contents', async (req: Request<HostIdParams, any, ListDirectoryContentsRequestBody>, res: Response) => {
   const { hostId } = req.params;
   const { directoryPath } = req.body;
 
@@ -430,7 +492,7 @@ async function readFileContent(host: Host, filePath: string): Promise<string> {
   }
 }
 
-app.post('/api/hosts/:hostId/read-file', async (req: Request, res: Response) => {
+app.post('/api/hosts/:hostId/read-file', async (req: Request<HostIdParams, any, ReadFileRequestBody>, res: Response) => {
   const { hostId } = req.params;
   const { filePath } = req.body;
 
@@ -457,7 +519,7 @@ app.get('/api/automation-configs', (req, res) => {
   res.json(automationConfigs);
 });
 
-app.post('/api/automation-configs', async (req: Request, res: Response) => {
+app.post('/api/automation-configs', async (req: Request<{}, any, AutomationConfigRequestBody>, res: Response) => {
   const { 
     name, 
     type, 
@@ -510,7 +572,7 @@ app.post('/api/automation-configs', async (req: Request, res: Response) => {
   res.status(201).json(newConfig);
 });
 
-app.put('/api/automation-configs/:id', async (req: Request, res: Response) => {
+app.put('/api/automation-configs/:id', async (req: Request<IdParams, any, AutomationConfigRequestBody>, res: Response) => {
   const { id } = req.params;
   const { 
     name, 
@@ -567,7 +629,7 @@ app.put('/api/automation-configs/:id', async (req: Request, res: Response) => {
   res.json(automationConfigs[configIndex]);
 });
 
-app.delete('/api/automation-configs/:id', async (req: Request, res: Response) => {
+app.delete('/api/automation-configs/:id', async (req: Request<IdParams, any, any>, res: Response) => {
   const { id } = req.params;
   const configIndex = automationConfigs.findIndex(ac => ac.id === id);
 
@@ -599,7 +661,7 @@ app.get('/api/hosts', (req, res) => {
 });
 
 // POST a new host
-app.post('/api/hosts', async (req: Request, res: Response) => {
+app.post('/api/hosts', async (req: Request<{}, any, HostRequestBody>, res: Response) => {
   const { alias, user, hostname, port } = req.body;
 
   if (!alias || !user || !hostname) {
@@ -622,7 +684,7 @@ app.post('/api/hosts', async (req: Request, res: Response) => {
 });
 
 // PUT (update) an existing host
-app.put('/api/hosts/:id', async (req: Request, res: Response) => {
+app.put('/api/hosts/:id', async (req: Request<IdParams, any, UpdateHostRequestBody>, res: Response) => {
   const { id } = req.params;
   const { alias, user, hostname, port } = req.body;
 
@@ -666,7 +728,7 @@ app.put('/api/hosts/:id', async (req: Request, res: Response) => {
 });
 
 // DELETE a host
-app.delete('/api/hosts/:id', async (req: Request, res: Response) => {
+app.delete('/api/hosts/:id', async (req: Request<IdParams, any, any>, res: Response) => {
   const { id } = req.params;
   // Prevent deleting the default 'localhost' entry if it's special
   if (id === 'localhost') {
@@ -683,7 +745,7 @@ app.delete('/api/hosts/:id', async (req: Request, res: Response) => {
 
 
 // SSH Key Copy ID
-app.post('/api/hosts/:id/ssh-copy-id', async (req: Request, res: Response) => {
+app.post('/api/hosts/:id/ssh-copy-id', async (req: Request<IdParams, any, SshCopyIdRequestBody>, res: Response) => {
   const { id } = req.params;
   const { password } = req.body;
 
@@ -756,7 +818,7 @@ app.get('/api/tasks', (req, res) => {
 });
 
 // POST a new task
-app.post('/api/tasks', async (req: Request, res: Response) => {
+app.post('/api/tasks', async (req: Request<{}, any, TaskRequestBody>, res: Response) => {
   const {
     name,
     sourceHost,
@@ -816,14 +878,14 @@ app.post('/api/tasks', async (req: Request, res: Response) => {
 });
 
 // DELETE all tasks
-app.delete('/api/tasks/delete-all', async (req: Request, res: Response) => {
+app.delete('/api/tasks/delete-all', async (req: Request<{}, any, any>, res: Response) => {
   tasks = []; // Clear the tasks array
   await saveData(); // Persist the change
   scheduleTaskExecutions(); // Reschedule tasks
   res.status(200).json({ message: 'All tasks deleted successfully.' }); // Or 204 No Content
 });
 
-app.delete('/api/tasks/:taskId', async (req: Request, res: Response) => {
+app.delete('/api/tasks/:taskId', async (req: Request<TaskIdParams, any, any>, res: Response) => {
   const { taskId } = req.params;
   const taskIndex = tasks.findIndex(t => t.id === taskId);
 
@@ -837,14 +899,14 @@ app.delete('/api/tasks/:taskId', async (req: Request, res: Response) => {
   res.status(204).send(); // No content, successful deletion
 });
 
-app.put('/api/tasks/:taskId', async (req: Request, res: Response) => {
+app.put('/api/tasks/:taskId', async (req: Request<TaskIdParams, any, StrictUpdateTaskRequestBody>, res: Response) => {
   const { taskId } = req.params;
   const {
     name,
     sourceHost,
     destinationHost,
     paths,
-    flags,
+    // flags, // flags are handled specially below
     scheduleEnabled,
     scheduleDetails,
     // automationConfigId and triggerFilePath are typically set on creation by automation
@@ -1171,7 +1233,7 @@ async function executeRsyncCommand(task: Task, pathPair: PathPair, hostsList: Ho
   });
 }
 
-app.post('/api/tasks/:taskId/run', async (req: Request, res: Response) => {
+app.post('/api/tasks/:taskId/run', async (req: Request<TaskIdParams, any, any>, res: Response) => {
   const { taskId } = req.params;
   const task = tasks.find(t => t.id === taskId);
   const startTime = new Date().toISOString();
@@ -1225,7 +1287,7 @@ app.post('/api/tasks/:taskId/run', async (req: Request, res: Response) => {
   }
 });
 
-app.post('/api/tasks/run-all', async (req: Request, res: Response) => {
+app.post('/api/tasks/run-all', async (req: Request<{}, any, any>, res: Response) => {
   if (tasks.length === 0) {
     return res.json({ message: 'No tasks to run.' });
   }
@@ -1291,7 +1353,7 @@ app.delete('/api/automation-run-logs', async (req, res) => {
 });
 
 // New API endpoint to get the command string for a task
-app.get('/api/tasks/:taskId/command', async (req: Request, res: Response) => {
+app.get('/api/tasks/:taskId/command', async (req: Request<TaskIdParams, any, any>, res: Response) => {
   const { taskId } = req.params;
   const task = tasks.find(t => t.id === taskId);
 
@@ -1324,7 +1386,7 @@ app.get('*', (req, res) => {
 });
 
 // --- Path Autocompletion API Endpoint ---
-app.post('/api/hosts/:hostId/suggest-path', async (req: Request, res: Response) => {
+app.post('/api/hosts/:hostId/suggest-path', async (req: Request<HostIdParams, any, SuggestPathRequestBody>, res: Response) => {
   const { hostId } = req.params;
   const { currentInputPath } = req.body;
 
