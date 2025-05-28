@@ -72,6 +72,7 @@ let automationConfigs: AutomationConfig[] = []; // Will be populated by loadData
 
 // Define a global array to keep track of cron jobs for automation scans
 let automationScanCronJobs: cron.ScheduledTask[] = [];
+let taskExecutionCronJobs: cron.ScheduledTask[] = []; // For individual task schedules
 
 // Helper function to translate schedule strings to cron patterns
 function translateScheduleToCron(scheduleString?: string): string | null {
@@ -810,6 +811,7 @@ app.post('/api/tasks', async (req, res) => {
   };
   tasks.push(newTask);
   await saveData();
+  scheduleTaskExecutions(); // Reschedule tasks
   res.status(201).json(newTask);
 });
 
@@ -817,6 +819,7 @@ app.post('/api/tasks', async (req, res) => {
 app.delete('/api/tasks/delete-all', async (req, res) => {
   tasks = []; // Clear the tasks array
   await saveData(); // Persist the change
+  scheduleTaskExecutions(); // Reschedule tasks
   res.status(200).json({ message: 'All tasks deleted successfully.' }); // Or 204 No Content
 });
 
@@ -830,6 +833,7 @@ app.delete('/api/tasks/:taskId', async (req, res) => {
 
   tasks.splice(taskIndex, 1);
   await saveData(); // Persist the change
+  scheduleTaskExecutions(); // Reschedule tasks
   res.status(204).send(); // No content, successful deletion
 });
 
@@ -897,6 +901,7 @@ app.put('/api/tasks/:taskId', async (req, res) => {
   };
 
   await saveData();
+  scheduleTaskExecutions(); // Reschedule tasks
   res.json(tasks[taskIndex]);
 });
 
@@ -1264,11 +1269,25 @@ app.get('/api/job-run-logs', (req, res) => {
   res.json(sortedLogs);
 });
 
+// DELETE all job run logs
+app.delete('/api/job-run-logs', async (req, res) => {
+  jobRunLogs = [];
+  await saveData();
+  res.status(200).json({ message: 'All job run logs cleared successfully.' });
+});
+
 // --- Automation Run Log API Endpoint ---
 app.get('/api/automation-run-logs', (req, res) => {
   // Return logs sorted by start time, newest first
   const sortedLogs = [...automationRunLogs].sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime());
   res.json(sortedLogs);
+});
+
+// DELETE all automation run logs
+app.delete('/api/automation-run-logs', async (req, res) => {
+  automationRunLogs = [];
+  await saveData(); // This will save the empty automationRunLogs to job_history.json
+  res.status(200).json({ message: 'All automation run logs cleared successfully.' });
 });
 
 // New API endpoint to get the command string for a task
@@ -1391,6 +1410,79 @@ app.post('/api/hosts/:hostId/suggest-path', async (req, res) => {
   }
 });
 
+
+// Helper function to execute a scheduled task
+async function runScheduledTask(taskId: string): Promise<void> {
+  const task = tasks.find(t => t.id === taskId);
+  const startTime = new Date().toISOString();
+
+  if (!task) {
+    const errorMsg = `[CronTaskRun] Scheduled task ${taskId} not found during execution.`;
+    console.error(errorMsg);
+    // Optionally, log this to a system log or a specific part of jobRunLogs if persistent tracking of such errors is needed.
+    // For now, console error is the primary notification.
+    return;
+  }
+
+  console.log(`[CronTaskRun] Automatically running scheduled task: ${task.name} (ID: ${task.id})`);
+
+  const executionResults: RsyncExecutionResult[] = [];
+  for (const pathPair of task.paths) {
+    const result = await executeRsyncCommand(task, pathPair, hosts);
+    executionResults.push(result);
+  }
+
+  const endTime = new Date().toISOString();
+  const overallSuccess = executionResults.every(r => r.success);
+  const someSuccess = executionResults.some(r => r.success);
+  let jobStatus: JobRunLog['status'] = 'error';
+  if (overallSuccess) {
+    jobStatus = 'success';
+  } else if (someSuccess) {
+    jobStatus = 'warning';
+  }
+
+  jobRunLogs.push({
+    id: Date.now().toString() + Math.random().toString(36).substring(2, 7), // Unique ID
+    taskId: task.id,
+    taskName: task.name,
+    startTime,
+    endTime,
+    status: jobStatus,
+    results: executionResults
+  });
+  await saveData(); // Persist the log after task execution
+  console.log(`[CronTaskRun] Finished running scheduled task: ${task.name}. Status: ${jobStatus}`);
+}
+
+// Function to schedule individual task executions based on their cron strings
+function scheduleTaskExecutions() {
+    // Stop and clear existing task cron jobs
+    taskExecutionCronJobs.forEach(job => job.stop());
+    taskExecutionCronJobs = [];
+
+    tasks.forEach(task => {
+        if (task.scheduleEnabled && task.scheduleDetails) {
+            if (cron.validate(task.scheduleDetails)) {
+                try {
+                    const job = cron.schedule(task.scheduleDetails, () => {
+                        console.log(`[CronTask] Triggering task execution: ${task.name} (ID: ${task.id}) as per schedule: ${task.scheduleDetails}`);
+                        runScheduledTask(task.id);
+                    }, {
+                        scheduled: true, // Ensure the job is scheduled when created
+                        // timezone: "Your/Timezone" // Optional: specify timezone if tasks are timezone-sensitive
+                    });
+                    taskExecutionCronJobs.push(job);
+                    console.log(`[Scheduler] Scheduled task execution for "${task.name}" with pattern "${task.scheduleDetails}".`);
+                } catch (e) {
+                    console.error(`[Scheduler] Failed to schedule task execution for "${task.name}" with pattern "${task.scheduleDetails}". Error: ${e}`);
+                }
+            } else {
+                console.warn(`[Scheduler] Invalid cron pattern "${task.scheduleDetails}" for task "${task.name}". Task will not be scheduled.`);
+            }
+        }
+    });
+}
 
 // In src/server.ts, add this new async function:
 async function runAutomationScanServerSide(configId: string) {
@@ -1619,18 +1711,20 @@ async function runAutomationScanServerSide(configId: string) {
         logEntry.id = Date.now().toString() + Math.random().toString(36).substring(2, 7); // Ensure ID is unique
         automationRunLogs.push(logEntry as AutomationRunLog);
 
+        const tasksWereModified = logEntry.tasksDeletedCount! > 0 || logEntry.tasksCreatedCount! > 0;
+
         // Save data if tasks were modified OR if the scan itself had issues/results worth logging permanently
-        if (logEntry.tasksDeletedCount! > 0 || logEntry.tasksCreatedCount! > 0 || logEntry.status === 'error' || logEntry.status === 'completed_with_errors') {
+        if (tasksWereModified || logEntry.status === 'error' || logEntry.status === 'completed_with_errors') {
             await saveData();
-        } else if (logEntry.triggerFilesFound! > 0 && logEntry.tasksCreatedCount === 0 && logEntry.tasksDeletedCount === 0) { // All existed
+        } else if (logEntry.triggerFilesFound! > 0 && logEntry.tasksCreatedCount === 0 && logEntry.tasksDeletedCount === 0) { // All existed, still save automation log
             await saveData();
         } else if (logEntry.triggerFilesFound === 0 && logEntry.tasksDeletedCount === 0) { // No triggers, no deletions (a "no-op" scan but still logged)
             await saveData();
         }
-        // The old specific saveData call:
-        // if (tasksDeletedCount > 0 || tasksCreatedCount > 0) {
-        //     await saveData();
-        // }
+            
+        if (tasksWereModified) {
+            scheduleTaskExecutions(); // Reschedule individual tasks if automation scan changed them
+        }
     }
 }
 
@@ -1666,7 +1760,8 @@ async function startServer() {
   app.listen(port, () => {
     console.log(`Project Zeus server listening at http://localhost:${port}`);
   });
-  scheduleAutomationScans(); // Initialize schedules after loading data
+  scheduleAutomationScans(); // Initialize automation scan schedules
+  scheduleTaskExecutions(); // Initialize individual task execution schedules
 }
 
 startServer();
