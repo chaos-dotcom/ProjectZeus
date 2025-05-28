@@ -4,3 +4,5 @@ websync-data.json
 dist
 job_history.json
 .ssh/*
+.rsa
+.pub
