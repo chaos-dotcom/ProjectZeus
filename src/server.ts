@@ -14,6 +14,20 @@ app.use(express.json());
 // Serve static files from the 'public' directory
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
+// Serve themeaning.jpg from the public directory
+app.get('/themeaning\\.jpg', (req, res) => {
+  const imagePath = path.join(__dirname, '..', 'public', 'themeaning.jpg');
+  res.sendFile(imagePath, (err) => {
+    if (err) {
+      console.error('Error sending themeaning.jpg:', err);
+      if (!res.headersSent) {
+        const statusCode = (err as any).status || (err as any).statusCode || 404;
+        res.status(statusCode).end();
+      }
+    }
+  });
+});
+
 // Serve projectzeus.gif from the project root
 app.get('/projectzeus\\.gif', (req, res) => {
   const gifPath = path.join(__dirname, '..', 'projectzeus.gif'); // Resolves to PROJECT_ROOT/projectzeus.gif
