@@ -1,7 +1,7 @@
 import express from 'express';
 import path from 'path';
 import { exec } from 'child_process';
-import cron from 'node-cron';
+import cron, { ScheduledTask } from 'node-cron';
 import fs from 'fs';
 import os from 'os';
 
@@ -71,8 +71,8 @@ interface AutomationConfig {
 let automationConfigs: AutomationConfig[] = []; // Will be populated by loadData
 
 // Define a global array to keep track of cron jobs for automation scans
-let automationScanCronJobs: cron.ScheduledTask[] = [];
-let taskExecutionCronJobs: cron.ScheduledTask[] = []; // For individual task schedules
+let automationScanCronJobs: ScheduledTask[] = [];
+let taskExecutionCronJobs: ScheduledTask[] = []; // For individual task schedules
 
 // Helper function to translate schedule strings to cron patterns
 function translateScheduleToCron(scheduleString?: string): string | null {
