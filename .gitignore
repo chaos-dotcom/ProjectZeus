@@ -6,3 +6,6 @@ job_history.json
 .ssh/*
 .rsa
 .pub
+data/.ssh/websync_id_rsa.pub
+
+data/.ssh/websync_id_rsa

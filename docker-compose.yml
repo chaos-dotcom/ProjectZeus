@@ -7,7 +7,7 @@ services:
       - "2003:3000"
     volumes:
       - ./data:/app/data
-      - ./data/.ssh:/root/.ssh
+      - ./data/.ssh:/root/.ssh:ro
     restart: unless-stopped
     environment:
       - NODE_ENV=production
