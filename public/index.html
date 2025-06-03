@@ -582,7 +582,11 @@
     <!-- Job History Section -->
     <div class="container tab-content" id="job-history-section">
         <h2>Job Run History</h2>
-        <button id="refreshJobHistoryButton" class="btn btn-info" style="margin-bottom: 10px;">Refresh History</button>
+        <div style="margin-bottom: 10px;"> <!-- Wrapper for buttons -->
+            <button id="refreshJobHistoryButton" class="btn btn-info">Refresh History</button>
+            <button id="clearRsyncLogsButton" class="btn btn-danger" style="margin-left: 10px;">Clear Rsync Task Logs</button>
+            <button id="clearAutomationLogsButton" class="btn btn-danger" style="margin-left: 10px;">Clear Automation Scan Logs</button>
+        </div>
         
         <h3>Rsync Task Execution Logs</h3>
         <div id="jobHistoryList">
@@ -2751,7 +2755,7 @@
             
             // Initialize autocompleters for static fields
             new PathAutocompleter(
-                automationConfigScanPathInput, 
+                automationConfigScanPathInput,
                 automationConfigScanHostSelect, 
                 document.getElementById('automationConfigScanPathSuggestions'),
                 () => automationConfigScanHostSelect.value // Provide host ID via callback
@@ -2770,6 +2774,78 @@
             );
 
             updateRemovePathButtonVisibility(); // Ensure correct visibility on load
+
+            // --- Clear Log History Buttons ---
+            const clearRsyncLogsButton = document.getElementById('clearRsyncLogsButton');
+            const clearAutomationLogsButton = document.getElementById('clearAutomationLogsButton');
+
+            if (clearRsyncLogsButton) {
+                clearRsyncLogsButton.addEventListener('click', async function() {
+                    if (this.dataset.confirming === 'true') {
+                        this.textContent = 'Clearing...';
+                        this.disabled = true;
+                        try {
+                            const response = await fetch('/api/job-run-logs', { method: 'DELETE' });
+                            if (!response.ok) {
+                                let errorMsg = 'Failed to clear Rsync task logs.';
+                                try { const errorData = await response.json(); errorMsg = errorData.message || errorMsg; } catch (e) {}
+                                throw new Error(errorMsg);
+                            }
+                            showMessage('Rsync task logs cleared successfully.', 'success');
+                            fetchAndRenderJobHistory(); // Refresh the history display
+                        } catch (error) {
+                            console.error('Error clearing Rsync task logs:', error);
+                            showMessage(`Error: ${error.message}`, 'error');
+                        } finally {
+                            this.dataset.confirming = 'false';
+                            this.textContent = 'Clear Rsync Task Logs';
+                            this.disabled = false;
+                            this.classList.remove('btn-warning');
+                            this.classList.add('btn-danger');
+                        }
+                    } else {
+                        this.dataset.confirming = 'true';
+                        this.textContent = 'Confirm Clear Rsync Logs?';
+                        this.classList.remove('btn-danger');
+                        this.classList.add('btn-warning');
+                        showMessage('Click again to PERMANENTLY clear all Rsync task execution logs.', 'info', 0);
+                    }
+                });
+            }
+
+            if (clearAutomationLogsButton) {
+                clearAutomationLogsButton.addEventListener('click', async function() {
+                    if (this.dataset.confirming === 'true') {
+                        this.textContent = 'Clearing...';
+                        this.disabled = true;
+                        try {
+                            const response = await fetch('/api/automation-run-logs', { method: 'DELETE' });
+                            if (!response.ok) {
+                                let errorMsg = 'Failed to clear automation scan logs.';
+                                try { const errorData = await response.json(); errorMsg = errorData.message || errorMsg; } catch (e) {}
+                                throw new Error(errorMsg);
+                            }
+                            showMessage('Automation scan logs cleared successfully.', 'success');
+                            fetchAndRenderJobHistory(); // Refresh the history display
+                        } catch (error) {
+                            console.error('Error clearing automation scan logs:', error);
+                            showMessage(`Error: ${error.message}`, 'error');
+                        } finally {
+                            this.dataset.confirming = 'false';
+                            this.textContent = 'Clear Automation Scan Logs';
+                            this.disabled = false;
+                            this.classList.remove('btn-warning');
+                            this.classList.add('btn-danger');
+                        }
+                    } else {
+                        this.dataset.confirming = 'true';
+                        this.textContent = 'Confirm Clear Automation Logs?';
+                        this.classList.remove('btn-danger');
+                        this.classList.add('btn-warning');
+                        showMessage('Click again to PERMANENTLY clear all automation scan logs.', 'info', 0);
+                    }
+                });
+            }
         });
     </script>
 </body>
