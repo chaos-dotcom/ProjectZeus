@@ -1035,7 +1035,13 @@ async function constructRsyncCommandForPathPair(
 
     if (task.automationConfigId) {
         const automationConfig = automationConfigs.find(ac => ac.id === task.automationConfigId);
-        if (automationConfig && automationConfig.type === 'turbosort') {
+        
+        if (automationConfig && automationConfig.type === 'livework') {
+            // Ensure .livework files are excluded for livework automations
+            if (!finalFlags.includes("--exclude='*.livework'")) {
+                finalFlags.push("--exclude='*.livework'");
+            }
+        } else if (automationConfig && automationConfig.type === 'turbosort') {
             const projectName = path.basename(pathPair.source.endsWith('/') ? pathPair.source.slice(0, -1) : pathPair.source);
             const excludeFilePathOnSource = path.join(pathPair.source, `.${projectName}_processed.txt`);
             
@@ -1828,7 +1834,21 @@ function scheduleAutomationScans() {
     automationScanCronJobs.forEach(job => job.stop());
     automationScanCronJobs = [];
 
-    automationConfigs.forEach(config => {
+    // Sort automationConfigs to prioritize 'livework' types.
+    // This means if multiple automations are scheduled for the exact same cron time,
+    // the .livework ones will have had their cron jobs registered first.
+    // Note: This does not guarantee sequential execution if they run asynchronously.
+    const sortedConfigs = [...automationConfigs].sort((a, b) => {
+        if (a.type === 'livework' && b.type !== 'livework') {
+            return -1; // a (livework) comes before b
+        }
+        if (a.type !== 'livework' && b.type === 'livework') {
+            return 1;  // b (livework) comes before a
+        }
+        return 0; // Maintain original order for same types or other types
+    });
+
+    sortedConfigs.forEach(config => {
         if (config.scanSchedule && config.scanSchedule !== 'manual') {
             const cronPattern = translateScheduleToCron(config.scanSchedule);
             if (cronPattern && cron.validate(cronPattern)) {
