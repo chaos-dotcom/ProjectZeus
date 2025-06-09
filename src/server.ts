@@ -1749,12 +1749,12 @@ async function runAutomationScanServerSide(configId: string) {
                 } else if (genSchedule === 'every_12_hours') {
                     taskScheduleEnabled = true;
                     taskScheduleDetailsCron = '0 */12 * * *'; // Every 12 Hours
-                } else if (genSchedule === 'daily_4am') {
+                } else if (genSchedule === 'daily_3am') { // Changed from daily_4am
                     taskScheduleEnabled = true;
-                    taskScheduleDetailsCron = '0 4 * * *'; // Every day at 4 AM
-                } else if (genSchedule === 'weekly_mon_4am') {
+                    taskScheduleDetailsCron = '0 3 * * *'; // Every day at 3 AM
+                } else if (genSchedule === 'weekly_sun_3am') { // Changed from weekly_mon_4am
                     taskScheduleEnabled = true;
-                    taskScheduleDetailsCron = '0 4 * * 1'; // Every Monday at 4 AM
+                    taskScheduleDetailsCron = '0 3 * * 0'; // Every Sunday at 3 AM
                 }
 
                 let baseFlags: string[];
