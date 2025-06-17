@@ -12,3 +12,4 @@ data/.ssh/websync_id_rsa
 data/.ssh/known_hosts
 data/.ssh/known_hosts.old
 .gitignore
+.DS_Store
