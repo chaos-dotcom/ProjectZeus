@@ -1261,8 +1261,9 @@ async function executeRsyncCommand(task: Task, pathPair: PathPair, hostsList: Ho
                     if (file.startsWith(pathPair.source)) {
                       relativePath = file.substring(pathPair.source.length);
                     }
-                    // Skip empty paths
-                    if (!relativePath.trim()) continue;
+                    // Skip empty paths AND the top-level directory placeholder "./"
+                    // as adding "./" to the exclude file would exclude everything in subsequent runs.
+                    if (!relativePath.trim() || relativePath === './') continue;
                     
                     // Add the file to our append string
                     appendEntries += `${relativePath}\n`;
@@ -1316,7 +1317,7 @@ app.post('/api/tasks/:taskId/run', async (req: Request<{taskId: string}, any, an
   if (!task) {
     const errorMsg = 'Task not found.';
     jobRunLogs.push({
-      id: Date.now().toString(),
+      id: Date.now().toString() + Math.random().toString(36).substring(2, 7), // More unique ID
       taskId: taskId,
       taskName: 'Unknown Task',
       startTime,
