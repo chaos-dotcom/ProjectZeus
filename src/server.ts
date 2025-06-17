@@ -1276,7 +1276,7 @@ async function executeRsyncCommand(task: Task, pathPair: PathPair, hostsList: Ho
                   appendCommand = `echo '${appendEntries.replace(/'/g, "'\\''")}' >> '${excludeFilePathOnSource.replace(/'/g, "'\\''")}'`;
                 } else {
                   console.log(`[Rsync Exec] No files to append to exclude list for task ${task.name}`);
-                  return; // Skip if no files to append
+                  // Removed return; // Skip if no files to append -- This was preventing promise resolution
                 }
                 let commandToRunOnSourceHost = appendCommand;
                 // privateKeyPath is already defined in the outer scope of executeRsyncCommand
