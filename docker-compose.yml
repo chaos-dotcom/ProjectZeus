@@ -8,7 +8,7 @@ services:
       - "2003:3000"
     volumes:
       - ./data:/app/data
-      - ./data/.ssh:/root/.ssh
+      - ./data/.ssh:/app/.ssh # Corrected path for appuser's .ssh directory
     restart: unless-stopped
     environment:
       - NODE_ENV=production

@@ -1239,7 +1239,7 @@ async function executeRsyncCommand(task: Task, pathPair: PathPair, hostsList: Ho
                   // DO NOT fall back to using the entire source path
                   // Instead, we'll skip updating the exclude file for this run
                   console.log(`[Rsync Exec] No files were transferred or could be parsed from output. Skipping exclude file update.`);
-                  return; // Skip the rest of the function
+                  // Removed premature return; The function should continue to resolve the promise.
                 }
                 
                 // Use the same exclude file path that was defined earlier
