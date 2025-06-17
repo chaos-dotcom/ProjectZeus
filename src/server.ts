@@ -802,16 +802,43 @@ app.post('/api/hosts/:id/ssh-copy-id', async (req: Request<{id: string}, any, Ss
 
     await new Promise<void>((resolve, reject) => {
       exec(sshCopyIdCommand, (error, stdout, stderr) => {
+        // Primary failure condition: command exited non-zero
         if (error) {
-          console.error(`ssh-copy-id error: ${stderr}`);
-          // Try to provide a more user-friendly error from stderr
-          if (stderr.toLowerCase().includes('permission denied')) {
+          console.error(`ssh-copy-id command execution failed. Stderr: ${stderr || 'N/A'}. Stdout: ${stdout || 'N/A'}. Error: ${error.message}`);
+          if (stderr && stderr.toLowerCase().includes('permission denied')) {
             return reject(new Error('Permission denied. Please check the password and user permissions.'));
           }
-          return reject(new Error(`Failed to copy SSH ID: ${stderr || error.message}`));
+          let errMsg = `Failed to copy SSH ID.`;
+          if (error.message) errMsg += ` Message: ${error.message}.`;
+          if (stderr) errMsg += ` Details: ${stderr}.`;
+          return reject(new Error(errMsg));
         }
-        console.log(`ssh-copy-id output: ${stdout}`);
-        resolve();
+
+        // Command exited zero. Now, verify from stdout that keys were actually managed.
+        // ssh-copy-id prints "Number of key(s) added: X" on success (X can be 0 if already present).
+        // It also prints "All keys were already present" if X=0.
+        const successInStdout = stdout && 
+                              (stdout.includes("Number of key(s) added:") || 
+                               stdout.includes("All keys were already present on the remote host"));
+
+        if (successInStdout) {
+          console.log(`ssh-copy-id successful. stdout: ${stdout}`);
+          resolve();
+        } else {
+          // Exit code 0, but stdout lacks confirmation. This is suspicious.
+          // stderr might contain the actual error reason (e.g., permission denied if ssh-copy-id is misbehaving).
+          console.warn(`ssh-copy-id command exited 0 but stdout lacked success confirmation. Stdout: "${stdout || 'N/A'}". Stderr: "${stderr || 'N/A'}"`);
+          if (stderr && stderr.toLowerCase().includes('permission denied')) {
+            // This is the scenario where exit code was 0 but stderr indicates auth failure.
+            return reject(new Error('Permission denied (reported in stderr). Please check the password and user permissions.'));
+          }
+          // Generic failure if stdout is not confirming and stderr doesn't give a clear "permission denied".
+          let failureMsg = 'SSH key copy operation may have failed. Output did not confirm key installation.';
+          if (stderr) failureMsg += ` Details: ${stderr}.`;
+          else if (stdout) failureMsg += ` Output: ${stdout}.`; 
+          else failureMsg += ' No informative output received.';
+          return reject(new Error(failureMsg));
+        }
       });
     });
 
