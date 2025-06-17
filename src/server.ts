@@ -1347,7 +1347,7 @@ app.post('/api/tasks/:taskId/run', async (req: Request<{taskId: string}, any, an
   }
 
   jobRunLogs.push({
-    id: Date.now().toString(),
+    id: Date.now().toString() + Math.random().toString(36).substring(2, 7), // More unique ID
     taskId: task.id,
     taskName: task.name,
     startTime,
