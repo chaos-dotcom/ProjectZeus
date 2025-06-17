@@ -1278,26 +1278,29 @@ async function executeRsyncCommand(task: Task, pathPair: PathPair, hostsList: Ho
                   console.log(`[Rsync Exec] No files to append to exclude list for task ${task.name}`);
                   // Removed return; // Skip if no files to append -- This was preventing promise resolution
                 }
-                let commandToRunOnSourceHost = appendCommand;
-                // privateKeyPath is already defined in the outer scope of executeRsyncCommand
+                // Only attempt to append if there's a command to run
+                if (appendCommand) {
+                    let commandToRunOnSourceHost = appendCommand;
+                    // privateKeyPath is already defined in the outer scope of executeRsyncCommand
 
-                if (sourceHostObj.id !== 'localhost') {
-                  const sshPortOption = sourceHostObj.port ? `-p ${sourceHostObj.port}` : '';
-                  commandToRunOnSourceHost = `ssh -i "${privateKeyPath}" ${sshPortOption} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes ${sourceHostObj.user}@${sourceHostObj.hostname} "${appendCommand.replace(/"/g, '\\"')}"`;
-                }
-                
-                console.log(`Appending to processed log on ${sourceHostObj.alias}: ${commandToRunOnSourceHost.split(' ')[0]} ...`);
-                await new Promise<void>((resolveAppend, rejectAppend) => {
-                  exec(commandToRunOnSourceHost, (appendError, appendStdout, appendStderr) => {
-                    if (appendError) {
-                      console.error(`Failed to append to processed log file ${excludeFilePathOnSource} on ${sourceHostObj.alias}: ${appendStderr || appendError.message}`);
-                      // Don't mark rsync as failed, but log this issue.
-                    } else {
-                      console.log(`Successfully appended transferred files to ${excludeFilePathOnSource} on ${sourceHostObj.alias}`);
+                    if (sourceHostObj.id !== 'localhost') {
+                      const sshPortOption = sourceHostObj.port ? `-p ${sourceHostObj.port}` : '';
+                      commandToRunOnSourceHost = `ssh -i "${privateKeyPath}" ${sshPortOption} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes ${sourceHostObj.user}@${sourceHostObj.hostname} "${appendCommand.replace(/"/g, '\\"')}"`;
                     }
-                    resolveAppend(); 
-                  });
-                });
+                    
+                    console.log(`Appending to processed log on ${sourceHostObj.alias}: ${commandToRunOnSourceHost.split(' ')[0]} ...`);
+                    await new Promise<void>((resolveAppend, rejectAppend) => {
+                      exec(commandToRunOnSourceHost, (appendError, appendStdout, appendStderr) => {
+                        if (appendError) {
+                          console.error(`Failed to append to processed log file ${excludeFilePathOnSource} on ${sourceHostObj.alias}: ${appendStderr || appendError.message}`);
+                          // Don't mark rsync as failed, but log this issue.
+                        } else {
+                          console.log(`Successfully appended transferred files to ${excludeFilePathOnSource} on ${sourceHostObj.alias}`);
+                        }
+                        resolveAppend(); 
+                      });
+                    });
+                } // End if (appendCommand)
               } catch (e) {
                 console.error(`Error during processed log update for task ${task.name}:`, e);
               }
