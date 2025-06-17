@@ -786,7 +786,18 @@ app.post('/api/hosts/:id/ssh-copy-id', async (req: Request<{id: string}, any, Ss
             return reject(new Error(`Failed to generate SSH key pair: ${stderr}`));
           }
           console.log(`ssh-keygen output: ${stdout}`);
-          resolve();
+          
+          // Attempt to add the generated key to ssh-agent
+          exec(`ssh-add "${privateKeyPath}"`, (addError, addStdout, addStderr) => {
+            if (addError) {
+              // Log a warning if ssh-add fails, but don't make ssh-copy-id fail.
+              // Agent forwarding is primarily for remote-to-remote rsync.
+              console.warn(`ssh-add failed for ${privateKeyPath}: ${addStderr || addError.message}. SSH agent forwarding for remote-to-remote transfers might not work if agent is not running or key is not added.`);
+            } else {
+              console.log(`ssh-add successful for ${privateKeyPath}: ${addStdout}`);
+            }
+            resolve(); // Resolve the promise for ssh-keygen completion
+          });
         });
       });
     }
@@ -1099,7 +1110,10 @@ async function constructRsyncCommandForPathPair(
                     console.error(`[Rsync Exec] Error during pre-rsync touch of exclude file for task ${task.name}:`, e);
                 }
             }
-            finalFlags.push(`--exclude-from='${excludeFilePathOnSource.replace(/'/g, "'\\''")}'`);
+            const excludeFromFlag = `--exclude-from='${excludeFilePathOnSource.replace(/'/g, "'\\''")}'`;
+            if (!finalFlags.includes(excludeFromFlag)) {
+                finalFlags.push(excludeFromFlag);
+            }
             if (!finalFlags.includes('--itemize-changes')) {
                 finalFlags.push('--itemize-changes');
             }
@@ -1112,14 +1126,18 @@ async function constructRsyncCommandForPathPair(
         if (sourceHostObj.id === destinationHostObj.id) {
             const remoteLocalRsyncCommand = `rsync ${effectiveFlagsString} '${pathPair.source.replace(/'/g, "'\\''")}' '${pathPair.destination.replace(/'/g, "'\\''")}'`;
             const sshPortOption = sourceHostObj.port ? `-p ${sourceHostObj.port}` : '';
+            // For remote-to-same-remote, no agent forwarding (-A) is needed as rsync is local on the remote machine.
             rsyncCommand = `ssh -i "${privateKeyPath}" ${sshPortOption} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes ${sourceHostObj.user}@${sourceHostObj.hostname} "${remoteLocalRsyncCommand.replace(/"/g, '\\"')}"`;
         } else {
-            const rhaToRhbSshCommandForRsync = `ssh${destinationHostObj.port ? ` -p ${destinationHostObj.port}` : ''}`;
+            // Inner SSH command (from source host to destination host) needs host key checking options.
+            const rhaToRhbSshCommandForRsync = `ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null${destinationHostObj.port ? ` -p ${destinationHostObj.port}` : ''}`;
             const remoteRsyncCommand = `rsync ${effectiveFlagsString} -e '${rhaToRhbSshCommandForRsync.replace(/'/g, "'\\''")}' '${pathPair.source.replace(/'/g, "'\\''")}' '${destinationHostObj.user}@${destinationHostObj.hostname}:${pathPair.destination.replace(/'/g, "'\\''")}'`;
             const outerSshPortOption = sourceHostObj.port ? `-p ${sourceHostObj.port}` : '';
-            rsyncCommand = `ssh -i "${privateKeyPath}" ${outerSshPortOption} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes ${sourceHostObj.user}@${sourceHostObj.hostname} "${remoteRsyncCommand.replace(/"/g, '\\"')}"`;
+            // Outer SSH command (from app container to source host) needs agent forwarding (-A) for the inner SSH to use the key.
+            rsyncCommand = `ssh -A -i "${privateKeyPath}" ${outerSshPortOption} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes ${sourceHostObj.user}@${sourceHostObj.hostname} "${remoteRsyncCommand.replace(/"/g, '\\"')}"`;
         }
     } else if (sourceHostObj.id !== 'localhost' || destinationHostObj.id !== 'localhost') {
+        // rsyncSshCommand already includes -i, StrictHostKeyChecking, UserKnownHostsFile, BatchMode
         rsyncCommand = `rsync ${effectiveFlagsString} -e 'ssh ${rsyncSshCommand.substring(4)}' "${sourceArg}" "${destinationArg}"`;
     } else {
         rsyncCommand = `rsync ${effectiveFlagsString} "${sourceArg}" "${destinationArg}"`;
