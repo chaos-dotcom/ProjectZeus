@@ -816,10 +816,11 @@ app.post('/api/hosts/:id/ssh-copy-id', async (req: Request<{id: string}, any, Ss
 
         // Command exited zero. Now, verify from stdout that keys were actually managed.
         // ssh-copy-id prints "Number of key(s) added: X" on success (X can be 0 if already present).
-        // It also prints "All keys were already present" if X=0.
+        // It also prints "All keys were already present" or "All keys were skipped because they already exist" if X=0.
         const successInStdout = stdout && 
                               (stdout.includes("Number of key(s) added:") || 
-                               stdout.includes("All keys were already present on the remote host"));
+                               stdout.includes("All keys were already present on the remote host") ||
+                               stdout.includes("All keys were skipped because they already exist on the remote system"));
 
         if (successInStdout) {
           console.log(`ssh-copy-id successful. stdout: ${stdout}`);
