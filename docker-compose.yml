@@ -2,6 +2,7 @@ version: '3.8'
 
 services:
   app:
+    user: "3000:3000"
     build: .
     ports:
       - "2003:3000"
