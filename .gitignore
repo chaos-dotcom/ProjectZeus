@@ -7,5 +7,8 @@ job_history.json
 .rsa
 .pub
 data/.ssh/websync_id_rsa.pub
-
+data/*
 data/.ssh/websync_id_rsa
+data/.ssh/known_hosts
+data/.ssh/known_hosts.old
+.gitignore
