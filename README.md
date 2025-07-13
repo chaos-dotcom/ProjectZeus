@@ -255,6 +255,25 @@ The server exposes the following API endpoints:
     *   Description: Deletes an automation configuration.
     *   Response: `204 No Content`.
 
+### Project Discovery
+
+*   **`GET /api/projects`**
+    *   Description: Retrieves a list of discovered projects. Projects are identified from tasks that have been created by an automation configuration. Each project is unique based on its source path.
+    *   Response: `200 OK` - JSON array of project objects.
+        ```json
+        [
+          {
+            "name": "MyProject",
+            "path": "/path/to/MyProject/",
+            "type": "livework",
+            "automationConfigId": "163...",
+            "automationConfigName": "Livework Scan Project A",
+            "scanHostId": "localhost",
+            "scanHostAlias": "Localhost"
+          }
+        ]
+        ```
+
 ### Utility Endpoints
 
 *   **`POST /api/hosts/:hostId/scan-directory`**
