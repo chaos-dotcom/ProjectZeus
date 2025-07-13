@@ -645,6 +645,47 @@ app.delete('/api/automation-configs/:id', async (req: Request<{id: string}, any,
   res.status(204).send();
 });
 
+// --- Discovered Projects API Endpoint ---
+interface Project {
+  name: string;
+  path: string;
+  type: 'livework' | 'turbosort';
+  automationConfigId: string;
+  automationConfigName: string;
+  scanHostId: string;
+  scanHostAlias: string;
+}
+
+app.get('/api/projects', (req, res) => {
+  const projectsMap = new Map<string, Project>();
+
+  for (const task of tasks) {
+    if (task.automationConfigId && task.paths.length > 0) {
+      const projectPath = task.paths[0].source;
+
+      if (!projectsMap.has(projectPath)) {
+        const automationConfig = automationConfigs.find(ac => ac.id === task.automationConfigId);
+        if (automationConfig) {
+          const scanHost = hosts.find(h => h.id === automationConfig.scanHostId);
+          const project: Project = {
+            name: path.basename(projectPath.endsWith('/') ? projectPath.slice(0, -1) : projectPath),
+            path: projectPath,
+            type: automationConfig.type,
+            automationConfigId: automationConfig.id,
+            automationConfigName: automationConfig.name,
+            scanHostId: automationConfig.scanHostId,
+            scanHostAlias: scanHost ? scanHost.alias : 'Unknown Host',
+          };
+          projectsMap.set(projectPath, project);
+        }
+      }
+    }
+  }
+
+  const projects = Array.from(projectsMap.values());
+  res.json(projects);
+});
+
 
 // --- Host Management ---
 interface Host {
