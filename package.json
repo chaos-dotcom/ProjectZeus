@@ -8,7 +8,8 @@
     "start": "node dist/server.js",
     "dev": "npm run build && npm start",
     "docker:build": "docker build -t project-zeus .",
-    "docker:run": "docker run -p 3000:3000 -v $(pwd)/data:/app/data -v ~/.ssh:/root/.ssh --name project-zeus-container project-zeus"
+    "docker:run": "docker run -p 3000:3000 -v $(pwd)/data:/app/data -v ~/.ssh:/root/.ssh --name project-zeus-container project-zeus",
+    "knip": "knip"
   },
   "keywords": [
     "rsync",
@@ -26,6 +27,7 @@
     "@types/express": "^5.0.2",
     "@types/node": "^22.15.21",
     "@types/node-cron": "^3.0.11",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "knip": "^5.25.1"
   }
 }
