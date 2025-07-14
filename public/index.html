@@ -493,6 +493,10 @@
                     <input type="text" id="automationConfigNameInput" placeholder="e.g., Project Zeus Livework Scan" required style="flex-grow:2;">
                 </div>
                 <div class="form-group">
+                    <label for="automationConfigLabelInput">Label:</label>
+                    <input type="text" id="automationConfigLabelInput" placeholder="e.g., Editorial, VFX, Dailies (optional)" style="flex-grow:2;">
+                </div>
+                <div class="form-group">
                     <label for="automationConfigTypeSelect">Type:</label>
                     <select id="automationConfigTypeSelect" style="flex-grow:1; margin-right:10px;">
                         <option value="livework">.livework files</option>
@@ -750,6 +754,7 @@
         const addAutomationConfigForm = document.getElementById('addAutomationConfigForm');
         const automationConfigFormTitle = document.getElementById('automationConfigFormTitle');
         const automationConfigNameInput = document.getElementById('automationConfigNameInput');
+        const automationConfigLabelInput = document.getElementById('automationConfigLabelInput');
         const automationConfigTypeSelect = document.getElementById('automationConfigTypeSelect');
         const automationConfigScanHostSelect = document.getElementById('automationConfigScanHostSelect');
         const automationConfigScanPathInput = document.getElementById('automationConfigScanPathInput');
@@ -1373,6 +1378,7 @@
                 itemDiv.innerHTML = `
                     <div class="details">
                         <strong>${config.name}</strong>
+                        ${config.label ? `<p><em>${escapeHtml(config.label)}</em></p>` : ''}
                         <p>Type: ${config.type === 'livework' ? '.livework files' : '.turbosort files'}</p>
                         <p>Scan Host: ${scanHostAlias}</p>
                         <p>Scan Path: ${config.scanDirectoryPath}</p>
@@ -1840,6 +1846,7 @@
             cancelEditAutomationConfigButton.style.display = 'inline-block';
 
             automationConfigNameInput.value = config.name;
+            automationConfigLabelInput.value = config.label || '';
             automationConfigTypeSelect.value = config.type;
             automationConfigScanHostSelect.value = config.scanHostId;
             automationConfigScanPathInput.value = config.scanDirectoryPath;
@@ -1867,6 +1874,7 @@
 
             const newConfigData = {
                 name: automationConfigNameInput.value.trim(),
+                label: automationConfigLabelInput.value.trim(),
                 type: automationConfigTypeSelect.value,
                 scanHostId: automationConfigScanHostSelect.value,
                 scanDirectoryPath: automationConfigScanPathInput.value.trim(),
