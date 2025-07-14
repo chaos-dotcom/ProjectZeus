@@ -1,7 +1,7 @@
 # Project Zeus Project License
 
 
-Any reference to the "Peep Show" remains prooperty of channel 4 (or the british taxpayer) and is not covered by any of this legal text. 
+Any reference to the "Peep Show" remains property of channel 4 (or the british taxpayer) and is not covered by any of this legal text. 
 
 
 ## 🏳️‍🌈 Pride Flag Covenant
