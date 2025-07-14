@@ -58,6 +58,7 @@ interface AutomationConfigRequestBody {
   destinationBasePath: string;
   scanSchedule?: string;
   generatedTaskSchedule?: string;
+  label?: string;
 }
 
 interface HostRequestBody {
@@ -103,6 +104,7 @@ interface SuggestPathRequestBody { currentInputPath: string; }
 interface AutomationConfig {
   id: string;
   name: string;
+  label?: string;
   type: 'livework' | 'turbosort'; // The type of file that triggers this automation
   scanHostId: string;             // The host where scanning for trigger files occurs
   scanDirectoryPath: string;      // The base directory on scanHostId to scan recursively
@@ -518,7 +520,8 @@ app.post('/api/automation-configs', async (req: Request<{}, any, AutomationConfi
     destinationHostIds, 
     destinationBasePath,
     scanSchedule,         // New field
-    generatedTaskSchedule // New field
+    generatedTaskSchedule, // New field
+    label
   } = req.body;
 
   if (!name || !type || !scanHostId || !scanDirectoryPath || !destinationHostIds || !destinationBasePath) {
@@ -547,6 +550,7 @@ app.post('/api/automation-configs', async (req: Request<{}, any, AutomationConfi
   const newConfig: AutomationConfig = {
     id: Date.now().toString(),
     name,
+    label,
     type,
     scanHostId,
     scanDirectoryPath,
@@ -577,7 +581,8 @@ app.put('/api/automation-configs/:id', async (req: Request<{id: string}, any, Au
     destinationHostIds, 
     destinationBasePath,
     scanSchedule,         // New field
-    generatedTaskSchedule // New field
+    generatedTaskSchedule, // New field
+    label
   } = req.body;
 
   if (!name || !type || !scanHostId || !scanDirectoryPath || !destinationHostIds || !destinationBasePath) {
@@ -612,6 +617,7 @@ app.put('/api/automation-configs/:id', async (req: Request<{id: string}, any, Au
   automationConfigs[configIndex] = {
     ...automationConfigs[configIndex], // Keep original ID and any other non-updated fields
     name,
+    label,
     type,
     scanHostId,
     scanDirectoryPath,
@@ -649,6 +655,7 @@ app.delete('/api/automation-configs/:id', async (req: Request<{id: string}, any,
 interface Project {
   name: string;
   path: string;
+  label?: string;
   type: 'livework' | 'turbosort';
   automationConfigId: string;
   automationConfigName: string;
@@ -670,6 +677,7 @@ app.get('/api/projects', (req, res) => {
           const project: Project = {
             name: path.basename(projectPath.endsWith('/') ? projectPath.slice(0, -1) : projectPath),
             path: projectPath,
+            label: automationConfig.label,
             type: automationConfig.type,
             automationConfigId: automationConfig.id,
             automationConfigName: automationConfig.name,
