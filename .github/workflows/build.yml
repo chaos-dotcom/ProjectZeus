@@ -26,3 +26,5 @@ jobs:
     
             - name: Run build
               run: npm run build
+            - name: Run knip
+              run: npx knip --fail-on-unused --fail-on-missing --fail-on-unknown --fail-on-duplicate --fail-on-missing-dependencies        
