@@ -1,5 +1,4 @@
-name: node run build
-
+name: Build and Knip Analysis
 on:
   push:
     branches: [ main ]
@@ -27,4 +26,4 @@ jobs:
             - name: Run build
               run: npm run build
             - name: Run knip
-              run: npm run knip 
+              run: npm run knip  
