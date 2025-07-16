@@ -1,8 +1,8 @@
 # Project Zeus
 
 <p align="center">
-  <img src="projectzeus.gif" width="250" style="display:inline-block; margin-right:10px;">
-  <img src="public/themeaning.jpg" width="250" style="display:inline-block;">
+  <img src="projectzeus.gif" width="300" style="display:inline-block; margin-right:10px;">
+  <img src="public/themeaning.jpg" width="300" style="display:inline-block;">
 </p>
 
 Project Zeus is a web-based task manager for rsync, designed to help you add, schedule, and maintain rsync tasks in a modern and user-friendly interface. This project is built with TypeScript, Node.js, and Express.
