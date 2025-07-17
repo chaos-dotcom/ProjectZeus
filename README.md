@@ -2,7 +2,7 @@
 
 <p align="center">
   <img src="projectzeus.gif" width="300" style="display:inline-block; margin-right:10px;">
-  <img src="public/themeaning.jpg" width="300" style="display:inline-block;">
+
 </p>
 
 Project Zeus is a web-based task manager for rsync, designed to help you add, schedule, and maintain rsync tasks in a modern and user-friendly interface. This project is built with TypeScript, Node.js, and Express.
@@ -10,7 +10,9 @@ Project Zeus is a web-based task manager for rsync, designed to help you add, sc
 It is not a fork but heavily inspired by [websync](https://github.com/furier/websync) which having been archived by it's owner in 2019 now means has a number of security vulnerabilities which meant it was easier to write a entirely new program from the ground up in typescript, it is worth mention this is not a fork of the code no code was copied or transferred,  I love the ideas that websync created with and honor it with a reference to it in the SSH key that zeus uses to connect to the first system for rsyncing. 
 
 Many of the functions are the same with some additional functions that are niche but are designed for my own workflow. if you find these useful then that is wonderful. 
-
+<p align="center">
+  <img src="public/themeaning.jpg" width="300" style="display:inline-block;">
+</p>
 
 ## Features
 
