@@ -1,7 +1,7 @@
 # Project Zeus
 
 <p align="center">
-  <img src="projectzeus.gif" width="300" style="display:inline-block; margin-right:10px;">
+  <img src="projectzeus.gif" width="500" style="display:inline-block; margin-right:10px;">
 
 </p>
 
@@ -11,7 +11,7 @@ It is not a fork but heavily inspired by [websync](https://github.com/furier/web
 
 Many of the functions are the same with some additional functions that are niche but are designed for my own workflow. if you find these useful then that is wonderful. 
 <p align="center">
-  <img src="public/themeaning.jpg" width="300" style="display:inline-block;">
+  <img src="public/themeaning.jpg" width="500" style="display:inline-block;">
 </p>
 
 ## Features
