@@ -83,6 +83,9 @@ describe('loadData', () => {
   });
 
   it('should handle empty or invalid JSON gracefully', async () => {
+    // Spy on console.error and provide a mock implementation to suppress output during this test
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+
     mockedFs.existsSync.mockReturnValue(true);
     mockFsPromises.readFile.mockRejectedValue(new Error('Invalid JSON'));
     mockFsPromises.writeFile.mockResolvedValue(undefined);
@@ -98,6 +101,12 @@ describe('loadData', () => {
     
     // It should write default files because parsing failed, leading to empty data structures
     expect(mockFsPromises.writeFile).toHaveBeenCalledTimes(2);
+
+    // We expect console.error to have been called due to the mocked file read error
+    expect(consoleErrorSpy).toHaveBeenCalled();
+
+    // Restore original console.error implementation
+    consoleErrorSpy.mockRestore();
   });
 
   it('should always include localhost, even if it is in the data file, without duplicates', async () => {
