@@ -38,7 +38,7 @@ interface Task {
   // Add other fields like lastRun, status, etc. later
 }
 
-let tasks: Task[] = []; // Will be populated by loadData
+export let tasks: Task[] = []; // Will be populated by loadData
 
 // --- Type definitions for Express route handlers ---
 
@@ -116,7 +116,7 @@ interface AutomationConfig {
   // templateTaskId?: string; // For future use: ID of a Task to use as a template
 }
 
-let automationConfigs: AutomationConfig[] = []; // Will be populated by loadData
+export let automationConfigs: AutomationConfig[] = []; // Will be populated by loadData
 
 // Define a global array to keep track of cron jobs for automation scans
 let automationScanCronJobs: ScheduledTask[] = [];
@@ -161,7 +161,7 @@ interface JobRunLog {
   results: RsyncExecutionResult[]; // Detailed results from each path pair
 }
 
-let jobRunLogs: JobRunLog[] = []; // Will be populated by loadData
+export let jobRunLogs: JobRunLog[] = []; // Will be populated by loadData
 
 // --- Automation Run Logging ---
 interface AutomationRunLog {
@@ -177,7 +177,7 @@ interface AutomationRunLog {
   messages: string[];
 }
 
-let automationRunLogs: AutomationRunLog[] = []; // Will be populated by loadData
+export let automationRunLogs: AutomationRunLog[] = []; // Will be populated by loadData
 
 
 // --- Data Persistence ---
@@ -187,10 +187,10 @@ const DATA_DIR = path.join(__dirname, '..', 'data');
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
-const DATA_FILE_PATH = path.join(DATA_DIR, 'websync-data.json');
-const JOB_HISTORY_FILE_PATH = path.join(DATA_DIR, 'job_history.json'); // New
+export const DATA_FILE_PATH = path.join(DATA_DIR, 'websync-data.json');
+export const JOB_HISTORY_FILE_PATH = path.join(DATA_DIR, 'job_history.json'); // New
 
-async function saveData(): Promise<void> {
+export async function saveData(): Promise<void> {
   try {
     // Save main configuration data (hosts, tasks, automationConfigs, jobRunLogs)
     const mainDataToSave = { hosts, tasks, automationConfigs, jobRunLogs }; // automationRunLogs removed
@@ -209,7 +209,7 @@ async function saveData(): Promise<void> {
   }
 }
 
-async function loadData(): Promise<void> {
+export async function loadData(): Promise<void> {
   let loadedHosts: Host[] = [];
   let loadedTasks: Task[] = [];
   let loadedAutomationConfigs: AutomationConfig[] = [];
@@ -704,7 +704,7 @@ interface Host {
   port?: number; // Optional port
 }
 
-let hosts: Host[] = []; // Will be populated by loadData
+export let hosts: Host[] = []; // Will be populated by loadData
 
 // GET all hosts
 app.get('/api/hosts', (req, res) => {
@@ -1966,6 +1966,19 @@ function scheduleAutomationScans() {
             }
         }
     });
+}
+
+// This function is intended for use in tests to reset module-level state.
+export function _resetInternalStateForTests() {
+  tasks = [];
+  automationConfigs = [];
+  automationScanCronJobs.forEach(job => job.stop());
+  automationScanCronJobs = [];
+  taskExecutionCronJobs.forEach(job => job.stop());
+  taskExecutionCronJobs = [];
+  jobRunLogs = [];
+  automationRunLogs = [];
+  hosts = [];
 }
 
 async function startServer() {
