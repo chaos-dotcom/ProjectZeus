@@ -1990,4 +1990,7 @@ async function startServer() {
   scheduleTaskExecutions(); // Initialize individual task execution schedules
 }
 
-startServer();
+// Only run startServer if not in a test environment
+if (process.env.NODE_ENV !== 'test') {
+  startServer();
+}
