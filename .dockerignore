@@ -7,3 +7,4 @@ dist
 websync-data.json
 job_history.json
 data
+data/
