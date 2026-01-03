@@ -1,9 +1,7 @@
-version: '3.8'
-
 services:
   app:
     user: "3000:3000"
-    build: .
+    image: ghcr.io/chaos-dotcom/projectzeus:latest
     ports:
       - "2003:3000"
     volumes:
