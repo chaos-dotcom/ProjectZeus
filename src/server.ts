@@ -1737,9 +1737,9 @@ function extractYearFromProjectFolderName(folderName: string): number | null {
 }
 
 function liveworkYearBucket(year: number): string {
-  // Map 2010–2019 into "2010s", otherwise use the exact year folder
-  if (year >= 2010 && year <= 2019) return '2010s';
-  return String(year);
+  const currentDecadeStart = Math.floor(new Date().getFullYear() / 10) * 10;
+  const yearDecadeStart = Math.floor(year / 10) * 10;
+  return yearDecadeStart < currentDecadeStart ? `${yearDecadeStart}s` : String(year);
 }
 
 // In src/server.ts, add this new async function:
