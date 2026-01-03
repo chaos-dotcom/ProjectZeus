@@ -31,7 +31,7 @@ RUN chown -R appuser:appgroup /app
 # so it will have permission to create /app/.ssh because /app is owned by appuser.
 
 # Expose the port the app runs on
-EXPOSE 3000
+EXPOSE 80
 
 # Command to run the application
 CMD ["npm", "start"]
