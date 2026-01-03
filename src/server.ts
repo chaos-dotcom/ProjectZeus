@@ -180,21 +180,58 @@ interface AutomationRunLog {
 export let automationRunLogs: AutomationRunLog[] = []; // Will be populated by loadData
 
 
-// --- Data Persistence ---
-// Use a data directory that can be mounted as a volume in Docker
-const DATA_DIR = path.join(__dirname, '..', 'data');
-// Create data directory if it doesn't exist
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-}
-export const DATA_FILE_PATH = path.join(DATA_DIR, 'websync-data.json');
-export const JOB_HISTORY_FILE_PATH = path.join(DATA_DIR, 'job_history.json'); // New
+ // --- Data Persistence ---
+ // Persist under /app/data by default (Docker). Allow override via DATA_DIR env var.
+ const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : '/app/data';
+ if (!fs.existsSync(DATA_DIR)) {
+   fs.mkdirSync(DATA_DIR, { recursive: true });
+ }
+ export const DATA_FILE_PATH = path.join(DATA_DIR, 'websync-data.json');
+ export const JOB_HISTORY_FILE_PATH = path.join(DATA_DIR, 'job_history.json');
 
-export async function saveData(): Promise<void> {
+ // Atomic write helpers with backup to reduce risk of blank overwrites
+ async function backupIfExists(filePath: string): Promise<void> {
+   try {
+     const stat = await fs.promises.stat(filePath);
+     if (stat.size > 0) {
+       await fs.promises.copyFile(filePath, filePath + '.bak');
+     }
+   } catch {
+     // ignore if file doesn't exist
+   }
+ }
+ 
+ async function writeJsonAtomic(filePath: string, data: any): Promise<void> {
+   const tmp = filePath + '.tmp';
+   await fs.promises.writeFile(tmp, JSON.stringify(data, null, 2), 'utf-8');
+   await fs.promises.rename(tmp, filePath);
+ }
+ 
+ async function readJsonWithBackup(filePath: string): Promise<any | null> {
+   try {
+     if (!fs.existsSync(filePath)) return null;
+     const text = await fs.promises.readFile(filePath, 'utf-8');
+     if (!text.trim()) throw new Error('Empty file');
+     return JSON.parse(text);
+   } catch {
+     const backup = filePath + '.bak';
+     try {
+       if (!fs.existsSync(backup)) return null;
+       const text2 = await fs.promises.readFile(backup, 'utf-8');
+       if (!text2.trim()) return null;
+       return JSON.parse(text2);
+     } catch {
+       return null;
+     }
+   }
+ }
+ 
+ export async function saveData(): Promise<void> {
   try {
     // Save main configuration data (hosts, tasks, automationConfigs, jobRunLogs)
     const mainDataToSave = { hosts, tasks, automationConfigs, jobRunLogs }; // automationRunLogs removed
-    await fs.promises.writeFile(DATA_FILE_PATH, JSON.stringify(mainDataToSave, null, 2), 'utf-8');
+    await backupIfExists(DATA_FILE_PATH);
+    await writeJsonAtomic(DATA_FILE_PATH, mainDataToSave);
     // console.log('Main data saved to file.'); // Optional: for debugging
   } catch (error) {
     console.error('Error saving main data to file:', error);
@@ -202,7 +239,8 @@ export async function saveData(): Promise<void> {
 
   try {
     // Save automation run logs to a separate file
-    await fs.promises.writeFile(JOB_HISTORY_FILE_PATH, JSON.stringify(automationRunLogs, null, 2), 'utf-8');
+    await backupIfExists(JOB_HISTORY_FILE_PATH);
+    await writeJsonAtomic(JOB_HISTORY_FILE_PATH, automationRunLogs);
     // console.log('Automation run logs saved to job_history.json.'); // Optional: for debugging
   } catch (error) {
     console.error('Error saving automation run logs to file:', error);
@@ -210,6 +248,8 @@ export async function saveData(): Promise<void> {
 }
 
 export async function loadData(): Promise<void> {
+  const dataFileExistedAtStart = fs.existsSync(DATA_FILE_PATH);
+  const jobHistoryExistedAtStart = fs.existsSync(JOB_HISTORY_FILE_PATH);
   let loadedHosts: Host[] = [];
   let loadedTasks: Task[] = [];
   let loadedAutomationConfigs: AutomationConfig[] = [];
@@ -217,17 +257,17 @@ export async function loadData(): Promise<void> {
   // let loadedAutomationRunLogs: AutomationRunLog[] = []; // Removed: will be loaded separately
 
   try {
-    if (fs.existsSync(DATA_FILE_PATH)) {
-      const fileContent = await fs.promises.readFile(DATA_FILE_PATH, 'utf-8');
-      const parsedData = JSON.parse(fileContent);
+    const parsedData = await readJsonWithBackup(DATA_FILE_PATH);
+    if (parsedData) {
       loadedHosts = parsedData.hosts || [];
       loadedTasks = parsedData.tasks || [];
       loadedAutomationConfigs = parsedData.automationConfigs || [];
       loadedJobRunLogs = parsedData.jobRunLogs || [];
-      // loadedAutomationRunLogs = parsedData.automationRunLogs || []; // Removed from here
+    } else if (dataFileExistedAtStart) {
+      console.error('Data file exists but could not be parsed, and no valid backup was found. Using in-memory defaults without overwriting on disk.');
     }
   } catch (error) {
-    console.error('Error reading or parsing data file. Initializing with empty/default data.', error);
+    console.error('Unexpected error reading main data file.', error);
   }
 
   // Ensure 'localhost' is always present and at the beginning.
@@ -248,27 +288,25 @@ export async function loadData(): Promise<void> {
   // New: Load automation run logs from their separate file
   let loadedAutomationRunLogsFromFile: AutomationRunLog[] = [];
   try {
-    if (fs.existsSync(JOB_HISTORY_FILE_PATH)) {
-      const jobHistoryFileContent = await fs.promises.readFile(JOB_HISTORY_FILE_PATH, 'utf-8');
-      // Ensure parsing an empty or invalid file results in an empty array
-      const parsedJobHistory = JSON.parse(jobHistoryFileContent);
-      loadedAutomationRunLogsFromFile = Array.isArray(parsedJobHistory) ? parsedJobHistory : [];
-    }
+    const parsedJobHistory = await readJsonWithBackup(JOB_HISTORY_FILE_PATH);
+    loadedAutomationRunLogsFromFile = Array.isArray(parsedJobHistory) ? parsedJobHistory : [];
   } catch (error) {
-    console.error('Error reading or parsing job_history.json. Initializing with empty logs.', error);
-    loadedAutomationRunLogsFromFile = []; // Ensure it's an empty array on error
+    console.error('Unexpected error reading job_history.json.', error);
+    loadedAutomationRunLogsFromFile = [];
   }
   automationRunLogs = loadedAutomationRunLogsFromFile;
 
 
   // If the file didn't exist initially or was unparsable and resulted in empty data structures, save initial state.
-  if (!fs.existsSync(DATA_FILE_PATH) ||
-      ((loadedHosts.length === 0 && !localhostFromFile) &&
-       loadedTasks.length === 0 &&
-       loadedAutomationConfigs.length === 0 &&
-       loadedJobRunLogs.length === 0) // automationRunLogs condition removed
-     ) {
-    await saveData(); // This will now create/update both files if needed
+  if (!dataFileExistedAtStart) {
+    await saveData(); // create initial files on first run only
+  }
+  if (!jobHistoryExistedAtStart) {
+    try {
+      await writeJsonAtomic(JOB_HISTORY_FILE_PATH, automationRunLogs);
+    } catch (e) {
+      console.error('Error creating job_history.json:', e);
+    }
   }
 }
 

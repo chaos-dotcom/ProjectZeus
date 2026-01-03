@@ -11,3 +11,4 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=80
+      - DATA_DIR=/app/data
