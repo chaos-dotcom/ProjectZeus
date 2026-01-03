@@ -1,7 +1,7 @@
 FROM node:18-alpine
 
 # Install system dependencies first
-RUN apk add --no-cache openssh-client sshpass
+RUN apk add --no-cache openssh-client sshpass rsync
 
 # Create app user and group
 # -S creates a system user (no password, no shell by default unless specified)
