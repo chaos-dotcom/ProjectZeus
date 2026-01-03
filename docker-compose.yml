@@ -3,11 +3,11 @@ services:
     user: "3000:3000"
     image: ghcr.io/chaos-dotcom/projectzeus:latest
     ports:
-      - "2003:3000"
+      - "2003:80"
     volumes:
       - ./data:/app/data
       - ./data/.ssh:/app/.ssh # Corrected path for appuser's .ssh directory
     restart: unless-stopped
     environment:
       - NODE_ENV=production
-      - PORT=3000
+      - PORT=80
