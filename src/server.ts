@@ -1721,6 +1721,27 @@ function scheduleTaskExecutions() {
     });
 }
 
+/**
+ * Year parsing helpers for .livework automations
+ */
+function extractYearFromProjectFolderName(folderName: string): number | null {
+  // Prefer a leading 4-digit year (e.g., 20250520_Project -> 2025)
+  const leadingYear = folderName.match(/^([12]\d{3})/);
+  if (leadingYear) {
+    const y = parseInt(leadingYear[1], 10);
+    if (y >= 1900 && y <= 2099) return y;
+  }
+  // Fallback: any standalone 19xx/20xx
+  const anywhere = folderName.match(/\b(19|20)\d{2}\b/);
+  return anywhere ? parseInt(anywhere[0], 10) : null;
+}
+
+function liveworkYearBucket(year: number): string {
+  // Map 2010–2019 into "2010s", otherwise use the exact year folder
+  if (year >= 2010 && year <= 2019) return '2010s';
+  return String(year);
+}
+
 // In src/server.ts, add this new async function:
 async function runAutomationScanServerSide(configId: string) {
     const startTimeForLog = new Date().toISOString();
@@ -1844,7 +1865,9 @@ async function runAutomationScanServerSide(configId: string) {
                 if (config.type === 'turbosort' && specificDestSubDir) {
                     finalDestinationPath = `${config.destinationBasePath}/${specificDestSubDir}/1_DRIVE`;
                 } else {
-                    finalDestinationPath = `${config.destinationBasePath}/${projectFolderName}`;
+                    const year = extractYearFromProjectFolderName(projectFolderName);
+                    const bucket = year ? liveworkYearBucket(year) : null;
+                    finalDestinationPath = `${config.destinationBasePath}/${bucket ? bucket + '/' : ''}${projectFolderName}`;
                 }
                 finalDestinationPath = finalDestinationPath.replace(/\/\//g, '/');
                 const rsyncSourcePath = parentDir.endsWith('/') ? parentDir : parentDir + '/';
