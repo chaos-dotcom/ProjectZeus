@@ -30,6 +30,7 @@ interface Task {
   destinationHost: string;
   paths: PathPair[];
   flags: string[]; // Store flags as an array of strings
+  excludes?: string[]; // Optional rsync exclude patterns/paths
   scheduleEnabled: boolean;
   scheduleDetails?: string; // e.g., cron string or simple description
   // Fields for linking to automation
@@ -82,6 +83,7 @@ interface TaskRequestBody {
   destinationHost: string;
   paths: PathPair[];
   flags?: string[];
+  excludes?: string[]; // User-defined rsync exclude patterns/paths
   scheduleEnabled?: boolean;
   scheduleDetails?: string;
   automationConfigId?: string;
@@ -93,6 +95,7 @@ interface StrictUpdateTaskRequestBody { // For PUT /api/tasks/:taskId
   destinationHost: string;
   paths: PathPair[];
   flags?: string[];
+  excludes?: string[]; // User-defined rsync exclude patterns/paths
   scheduleEnabled?: boolean;
   scheduleDetails?: string;
   // automationConfigId and triggerFilePath are not typically part of user update payload
@@ -964,6 +967,7 @@ app.post('/api/tasks', async (req: Request<{}, any, TaskRequestBody>, res: Respo
     destinationHost,
     paths,
     flags,
+    excludes,
     scheduleEnabled,
     scheduleDetails,
     // New optional fields for automation linking
@@ -992,6 +996,7 @@ app.post('/api/tasks', async (req: Request<{}, any, TaskRequestBody>, res: Respo
   }
 
   let effectiveFlags = flags || []; // Start with provided flags
+  const sanitizedExcludes = Array.isArray(excludes) ? excludes.filter(e => typeof e === 'string').map(e => e.trim()).filter(e => e.length > 0) : [];
 
   if (automationConfigId) {
     const linkedAutomationConfig = automationConfigs.find(ac => ac.id === automationConfigId);
@@ -1009,6 +1014,7 @@ app.post('/api/tasks', async (req: Request<{}, any, TaskRequestBody>, res: Respo
     destinationHost,
     paths,
     flags: effectiveFlags, // Use the potentially modified flags
+    excludes: sanitizedExcludes, // User-defined exclude patterns/paths
     scheduleEnabled: !!scheduleEnabled,
     scheduleDetails: scheduleEnabled ? scheduleDetails : undefined,
     automationConfigId: automationConfigId || undefined,
@@ -1089,6 +1095,9 @@ app.put('/api/tasks/:taskId', async (req: Request<{taskId: string}, any, StrictU
   // Start with new flags if provided in the request body, else use existing flags.
   // Ensure req.body.flags is explicitly checked for undefined to distinguish from an empty array.
   let updatedFlags = req.body.flags !== undefined ? (req.body.flags || []) : [...existingTask.flags];
+  const updatedExcludes = req.body.excludes !== undefined
+    ? (Array.isArray(req.body.excludes) ? req.body.excludes.filter(e => typeof e === 'string').map(e => e.trim()).filter(e => e.length > 0) : [])
+    : (existingTask.excludes ? [...existingTask.excludes] : []);
 
   // If the task is linked to a turbosort automation, ensure --itemize-changes is present.
   if (existingTask.automationConfigId) {
@@ -1107,6 +1116,7 @@ app.put('/api/tasks/:taskId', async (req: Request<{taskId: string}, any, StrictU
     destinationHost,
     paths,
     flags: updatedFlags, // Use the processed flags
+    excludes: updatedExcludes, // User-defined exclude patterns/paths
     scheduleEnabled: !!scheduleEnabled,
     scheduleDetails: scheduleEnabled ? scheduleDetails : undefined,
   };
@@ -1158,6 +1168,20 @@ async function constructRsyncCommandForPathPair(
     const rsyncSshCommand = `ssh -i "${privateKeyPath}" ${sshPortForRsync ? `-p ${sshPortForRsync}` : ''} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes`;
     
     let finalFlags = [...task.flags]; // Start with task's flags
+
+    // Include any user-defined exclude patterns/paths from the task
+    if (task.excludes && Array.isArray(task.excludes)) {
+        for (const pat of task.excludes) {
+            if (typeof pat !== 'string') continue;
+            const trimmed = pat.trim();
+            if (!trimmed) continue;
+            const escaped = trimmed.replace(/'/g, "'\\''");
+            const excludeFlag = `--exclude='${escaped}'`;
+            if (!finalFlags.includes(excludeFlag)) {
+                finalFlags.push(excludeFlag);
+            }
+        }
+    }
 
     if (task.automationConfigId) {
         const automationConfig = automationConfigs.find(ac => ac.id === task.automationConfigId);
