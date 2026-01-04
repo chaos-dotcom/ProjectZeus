@@ -8,3 +8,7 @@ websync-data.json
 job_history.json
 data
 data/
+data/*
+data/websync-data.json
+data/job_history.json
+.env
