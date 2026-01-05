@@ -4,6 +4,7 @@ import { exec } from 'child_process';
 import cron, { ScheduledTask } from 'node-cron';
 import fs from 'fs';
 import os from 'os';
+import cronParser from 'cron-parser';
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -124,6 +125,105 @@ export let automationConfigs: AutomationConfig[] = []; // Will be populated by l
 // Define a global array to keep track of cron jobs for automation scans
 let automationScanCronJobs: ScheduledTask[] = [];
 let taskExecutionCronJobs: ScheduledTask[] = []; // For individual task schedules
+
+const SCHEDULER_MODE = (process.env.SCHEDULER_MODE || 'interactive').toLowerCase();
+const interactiveSchedulerEnabled = SCHEDULER_MODE === 'interactive';
+
+type InteractiveSchedule = {
+  kind: 'automation' | 'task';
+  id: string;
+  name: string;
+  cron: string;
+  nextRun: Date;
+};
+let interactiveSchedules: InteractiveSchedule[] = [];
+let interactiveLoopTimer: NodeJS.Timeout | null = null;
+let interactiveLoopInProgress = false;
+
+function computeNextDate(cronExpr: string, from?: Date): Date | null {
+  try {
+    const it = cronParser.parseExpression(cronExpr, { currentDate: from || new Date() });
+    return it.next().toDate();
+  } catch (e: any) {
+    console.warn(`Invalid cron expression "${cronExpr}": ${e.message || e}`);
+    return null;
+  }
+}
+
+async function processDueInteractiveSchedules(): Promise<void> {
+  if (!interactiveSchedulerEnabled || interactiveLoopInProgress) return;
+  interactiveLoopInProgress = true;
+  const now = new Date();
+  try {
+    const due = interactiveSchedules.filter(s => s.nextRun.getTime() <= now.getTime());
+    for (const s of due) {
+      if (s.kind === 'automation') {
+        await runAutomationScanServerSide(s.id);
+      } else {
+        await runScheduledTask(s.id);
+      }
+      const nextDate = computeNextDate(s.cron, new Date(now.getTime() + 1000));
+      if (nextDate) {
+        s.nextRun = nextDate;
+      } else {
+        interactiveSchedules = interactiveSchedules.filter(x => x !== s);
+      }
+    }
+  } finally {
+    interactiveLoopInProgress = false;
+  }
+}
+
+function scheduleNextTick() {
+  if (!interactiveSchedulerEnabled || interactiveSchedules.length === 0) return;
+  const now = new Date();
+  const anyDue = interactiveSchedules.some(s => s.nextRun <= now);
+  if (anyDue) {
+    processDueInteractiveSchedules().then(scheduleNextTick).catch(scheduleNextTick);
+    return;
+  }
+  const nextAt = interactiveSchedules.reduce((min, s) => s.nextRun < min ? s.nextRun : min, interactiveSchedules[0].nextRun);
+  const delay = Math.max(0, nextAt.getTime() - Date.now());
+  if (interactiveLoopTimer) clearTimeout(interactiveLoopTimer);
+  interactiveLoopTimer = setTimeout(async () => {
+    await processDueInteractiveSchedules();
+    scheduleNextTick();
+  }, Math.min(delay, 60_000));
+}
+
+function startInteractiveSchedulerLoop() {
+  if (!interactiveSchedulerEnabled) return;
+  if (interactiveLoopTimer) { clearTimeout(interactiveLoopTimer); interactiveLoopTimer = null; }
+  scheduleNextTick();
+}
+
+function rebuildInteractiveSchedules() {
+  if (!interactiveSchedulerEnabled) return;
+  interactiveSchedules = [];
+  // Automations
+  const sortedConfigs = [...automationConfigs].sort((a, b) => {
+    if (a.type === 'livework' && b.type !== 'livework') return -1;
+    if (a.type !== 'livework' && b.type === 'livework') return 1;
+    return 0;
+  });
+  for (const config of sortedConfigs) {
+    if (!config.scanSchedule || config.scanSchedule === 'manual') continue;
+    const cronPattern = translateScheduleToCron(config.scanSchedule);
+    if (!cronPattern || !cron.validate(cronPattern)) continue;
+    const next = computeNextDate(cronPattern);
+    if (!next) continue;
+    interactiveSchedules.push({ kind: 'automation', id: config.id, name: config.name, cron: cronPattern, nextRun: next });
+  }
+  // Tasks
+  for (const task of tasks) {
+    if (!task.scheduleEnabled || !task.scheduleDetails) continue;
+    if (!cron.validate(task.scheduleDetails)) continue;
+    const next = computeNextDate(task.scheduleDetails);
+    if (!next) continue;
+    interactiveSchedules.push({ kind: 'task', id: task.id, name: task.name, cron: task.scheduleDetails, nextRun: next });
+  }
+  startInteractiveSchedulerLoop();
+}
 
 // Helper function to translate schedule strings to cron patterns
 function translateScheduleToCron(scheduleString?: string): string | null {
@@ -1544,6 +1644,33 @@ app.delete('/api/automation-run-logs', async (req, res) => {
   res.status(200).json({ message: 'All automation run logs cleared successfully.' });
 });
 
+app.get('/api/scheduler/status', (req, res) => {
+  res.json({
+    mode: interactiveSchedulerEnabled ? 'interactive' : 'node-cron',
+    interactiveSchedulerEnabled,
+    items: interactiveSchedulerEnabled
+      ? interactiveSchedules.map(s => ({
+          kind: s.kind,
+          id: s.id,
+          name: s.name,
+          cron: s.cron,
+          nextRun: s.nextRun.toISOString()
+        }))
+      : []
+  });
+});
+
+app.post('/api/scheduler/run-due', async (req, res) => {
+  if (!interactiveSchedulerEnabled) {
+    res.status(400).json({ message: 'Interactive scheduler is not enabled (set SCHEDULER_MODE=interactive).' });
+    return;
+  }
+  const dueCount = interactiveSchedules.filter(s => s.nextRun.getTime() <= Date.now()).length;
+  await processDueInteractiveSchedules();
+  scheduleNextTick();
+  res.json({ message: `Triggered ${dueCount} due schedule(s).`, count: dueCount });
+});
+
 // New API endpoint to get the command string for a task
 app.get('/api/tasks/:taskId/command', async (req: Request<{taskId: string}, any, any>, res: Response): Promise<void> => {
   const { taskId } = req.params;
@@ -1722,6 +1849,10 @@ function scheduleTaskExecutions() {
     // Stop and clear existing task cron jobs
     taskExecutionCronJobs.forEach(job => job.stop());
     taskExecutionCronJobs = [];
+    if (interactiveSchedulerEnabled) {
+        rebuildInteractiveSchedules();
+        return;
+    }
 
     tasks.forEach(task => {
         if (task.scheduleEnabled && task.scheduleDetails) {
@@ -2017,6 +2148,10 @@ function scheduleAutomationScans() {
     // Stop and clear existing cron jobs
     automationScanCronJobs.forEach(job => job.stop());
     automationScanCronJobs = [];
+    if (interactiveSchedulerEnabled) {
+        rebuildInteractiveSchedules();
+        return;
+    }
 
     // Sort automationConfigs to prioritize 'livework' types.
     // This means if multiple automations are scheduled for the exact same cron time,

@@ -590,6 +590,8 @@
             <button id="refreshJobHistoryButton" class="btn btn-info">Refresh History</button>
             <button id="clearRsyncLogsButton" class="btn btn-danger" style="margin-left: 10px;">Clear Rsync Task Logs</button>
             <button id="clearAutomationLogsButton" class="btn btn-danger" style="margin-left: 10px;">Clear Automation Scan Logs</button>
+            <button id="runDueSchedulesButton" class="btn btn-primary" style="margin-left: 10px;">Run Due Schedules</button>
+            <span id="schedulerStatus" style="margin-left: 10px; font-size: 0.9em; color: #555;"></span>
         </div>
         
         <h3>Rsync Task Execution Logs</h3>
@@ -785,6 +787,8 @@ node_modules/
         const jobHistoryListElement = document.getElementById('jobHistoryList');
         const refreshJobHistoryButton = document.getElementById('refreshJobHistoryButton');
         const automationJobHistoryListElement = document.getElementById('automationJobHistoryList'); // New
+        const runDueSchedulesButton = document.getElementById('runDueSchedulesButton');
+        const schedulerStatusSpan = document.getElementById('schedulerStatus');
 
         // NEW: Directory Browser Elements
         const directoryBrowserModal = document.getElementById('directoryBrowserModal');
@@ -1042,6 +1046,7 @@ node_modules/
                     content.classList.add('active');
                     if (targetTabId === 'job-history') { 
                         fetchAndRenderJobHistory();
+                        fetchAndRenderSchedulerStatus();
                     }
                 }
             });
@@ -2560,6 +2565,45 @@ node_modules/
             refreshJobHistoryButton.addEventListener('click', fetchAndRenderJobHistory);
         }
 
+        async function fetchAndRenderSchedulerStatus() {
+            try {
+                const res = await fetch('/api/scheduler/status');
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+                if (schedulerStatusSpan) {
+                    schedulerStatusSpan.textContent = data.interactiveSchedulerEnabled
+                        ? `Scheduler: interactive (items: ${data.items.length})`
+                        : 'Scheduler: node-cron';
+                }
+                if (runDueSchedulesButton) {
+                    runDueSchedulesButton.style.display = data.interactiveSchedulerEnabled ? 'inline-block' : 'none';
+                }
+            } catch (e) {
+                console.error('Scheduler status error:', e);
+                if (schedulerStatusSpan) schedulerStatusSpan.textContent = '';
+            }
+        }
+
+        if (runDueSchedulesButton) {
+            runDueSchedulesButton.addEventListener('click', async () => {
+                runDueSchedulesButton.textContent = 'Running...';
+                runDueSchedulesButton.disabled = true;
+                try {
+                    const res = await fetch('/api/scheduler/run-due', { method: 'POST' });
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.message || `HTTP ${res.status}`);
+                    showMessage(data.message || 'Triggered due schedules.', 'success');
+                    fetchAndRenderJobHistory();
+                } catch (e) {
+                    showMessage(`Error triggering due schedules: ${e.message}`, 'error');
+                } finally {
+                    runDueSchedulesButton.textContent = 'Run Due Schedules';
+                    runDueSchedulesButton.disabled = false;
+                    fetchAndRenderSchedulerStatus();
+                }
+            });
+        }
+
         function renderAutomationRunHistoryList(logs) {
             if (!automationJobHistoryListElement) return;
             automationJobHistoryListElement.innerHTML = '';
@@ -2780,6 +2824,7 @@ node_modules/
             fetchAndRenderHosts();   // Fetch hosts first to populate dropdowns for all relevant forms
             fetchAndRenderTasks();   // Then fetch tasks
             fetchAndRenderAutomationConfigs(); // Fetch automation configs
+            fetchAndRenderSchedulerStatus();
             
             // Set initial active tab (Tasks)
             setActiveTab('tasks');

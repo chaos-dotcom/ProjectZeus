@@ -22,7 +22,8 @@
   "license": "MIT",
   "dependencies": {
     "express": "^5.1.0",
-    "node-cron": "^4.0.7"
+    "node-cron": "^4.0.7",
+    "cron-parser": "^4.9.0"
   },
   "devDependencies": {
     "@types/express": "^5.0.2",
