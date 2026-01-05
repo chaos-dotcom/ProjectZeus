@@ -1269,13 +1269,28 @@ async function constructRsyncCommandForPathPair(
     
     let finalFlags = [...task.flags]; // Start with task's flags
 
-    // Include any user-defined exclude patterns/paths from the task
+    // Include user-defined excludes; map absolute paths to relative-to-source-root, anchored.
+    const sourceRootForMatch = path.posix.normalize(pathPair.source.endsWith('/') ? pathPair.source : pathPair.source + '/');
     if (task.excludes && Array.isArray(task.excludes)) {
-        for (const pat of task.excludes) {
-            if (typeof pat !== 'string') continue;
-            const trimmed = pat.trim();
-            if (!trimmed) continue;
-            const escaped = trimmed.replace(/'/g, "'\\''");
+        for (const raw of task.excludes) {
+            if (typeof raw !== 'string') continue;
+            let pat = raw.trim();
+            if (!pat) continue;
+
+            // If the pattern is absolute (starts with '/'), reinterpret it relative to this path pair's source root.
+            if (pat.startsWith('/')) {
+                const absPat = path.posix.normalize(pat);
+                if (absPat.startsWith(sourceRootForMatch)) {
+                    // Relativize to the transfer root and anchor it
+                    let rel = absPat.slice(sourceRootForMatch.length).replace(/^\/+/, '');
+                    pat = '/' + rel; // anchored at transfer root
+                } else {
+                    // Pattern is outside this source root; ignore for this path pair
+                    continue;
+                }
+            }
+
+            const escaped = pat.replace(/'/g, "'\\''");
             const excludeFlag = `--exclude='${escaped}'`;
             if (!finalFlags.includes(excludeFlag)) {
                 finalFlags.push(excludeFlag);
