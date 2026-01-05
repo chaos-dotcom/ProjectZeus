@@ -646,6 +646,15 @@
                     </div>
                 </div>
                 
+                <div class="form-group" style="margin-top:15px; align-items: flex-start;">
+                    <label for="excludePatternsTextarea" style="padding-top: 8px;">Ignore (rsync --exclude):</label>
+                    <textarea id="excludePatternsTextarea" rows="4" placeholder="One pattern or path per line, e.g.:
+*.tmp
+node_modules/
+.DS_Store
+*/cache/*"></textarea>
+                </div>
+                
                 <h4>Schedule:</h4>
                 <div class="form-group schedule-toggle">
                     <label>Status:</label>
@@ -734,6 +743,7 @@
         const cancelEditTaskButton = document.getElementById('cancelEditTaskButton');
         const runTaskBtn = document.getElementById('runTaskBtn'); // For showing/hiding
         const testTaskBtn = document.getElementById('testTaskBtn'); // For showing/hiding
+        const excludePatternsTextarea = document.getElementById('excludePatternsTextarea');
 
         let editingTaskId = null; // To store the ID of the task being edited
 
@@ -1977,6 +1987,9 @@
                                 }
                                 const data = await response.json();
                                 let detailsHtml = `<h4>Commands for: ${escapeHtml(data.taskName)}</h4>`;
+                                if (Array.isArray(task.excludes) && task.excludes.length > 0) {
+                                    detailsHtml += '<h5>Ignore patterns</h5><pre>' + escapeHtml(task.excludes.join('\n')) + '</pre>';
+                                }
                                 if (data.commands && data.commands.length > 0) {
                                     data.commands.forEach((cmdDetail, index) => {
                                         detailsHtml += `
@@ -2220,6 +2233,8 @@
             flagsButtonContainer.querySelectorAll('.flag-btn.active').forEach(button => {
                 button.classList.remove('active');
             });
+            // Reset excludes
+            if (excludePatternsTextarea) excludePatternsTextarea.value = '';
             // Reset schedule
             scheduleOffBtn.click();
             // Reset host dropdowns to default (e.g., first host or localhost)
@@ -2280,6 +2295,12 @@
                 }
             });
 
+            // Set excludes
+            if (excludePatternsTextarea) {
+                const lines = Array.isArray(task.excludes) ? task.excludes : [];
+                excludePatternsTextarea.value = lines.join('\n');
+            }
+
             // Set schedule
             if (task.scheduleEnabled) {
                 scheduleOnBtn.click();
@@ -2319,6 +2340,7 @@
                 selectedFlags.push(button.dataset.flag);
             });
 
+            const excludeLines = excludePatternsTextarea ? excludePatternsTextarea.value.split('\n').map(s => s.trim()).filter(s => s.length > 0) : [];
 
             const taskData = {
                 name: taskName,
@@ -2326,6 +2348,7 @@
                 destinationHost: destinationHostSelect.value,
                 paths: paths,
                 flags: selectedFlags,
+                excludes: excludeLines,
                 scheduleEnabled: scheduleEnabled,
                 scheduleDetails: scheduleEnabled ? scheduleDetailsInput.value.trim() : undefined,
                 // automationConfigId and triggerFilePath are not set/modified by this form
